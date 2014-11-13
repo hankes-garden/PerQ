@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 '''
 Brief Description: 
-    1. some implementation notes
-        a. for stochastic gradient of R = PQ, if we update p_ik first, then we will use the updated p_ik in q_kj's update  
+    This model implement Collective Matrix factorization (http://dl.acm.org/citation.cfm?id=1401969).
+    Insteading using stochastic-optimized newton's method solution, we solve the minimization of the
+    loss function by a stochastic gradient descent
 
 @author: jason
 '''
 
 #TODO: 1. consider how to represent sparse matrix S and R
 #TODO: 2. consider how to represent unknown values
+#TODO: 1. Is weight matrix a variable in loss function?
 
 import numpy as np
 import pandas as pd
@@ -22,28 +24,28 @@ g_dLearningRate = 0.05
 
 def getLearningRate(gamma, nIter):
     '''
-        dynamically change learning rate
+        dynamically change learning rate w.r.t #iteration
     '''
     newGamma = gamma0 / pow(nIter+1, power_t)
     return newGamma
 
-def cmf(D, S, R, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE):
-    #TODO: 1. Is weight matrix a variable in loss function?
+def cmf(D, S, R, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None):
     '''
         This function factorize matrices simultaneously
-        D = UP
-        S = VQ
-        R = bu + bv + UV
+        D = U·P^T
+        S = V·Q^T
+        R = bu + bv + U·V^T
         
         params:
-            D - user-profile matrix, m-by-l
-            S - video-quality matrix, n-by-h (sparse, 0 for unknown)
+            D - user-profile matrix, m-by-l (dense)
+            S - video-quality matrix, n-by-h (dense)
             R - user-video matrix, m-by-n (sparse, 0 for unknown)
-            arrAlphas - array of alpha, sum to 1
-            arrLambdas - array of lambda for regularization
+            arrAlphas - re-construction weights for R, D, S
+            arrLambdas - lambda for regularization
             f - number of latent factor
+            dLearningRate - initial learning rate
             nMaxStep - max iteration
-            gamma - initial learning rate
+            lsRMSE - list for RMSE of each step
             
         return
             bu - user bias matrix, m-by-1
@@ -143,7 +145,8 @@ def cmf(D, S, R, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE):
         dcRMSE['rmseR'] = rmseR
         dcRMSE['rmseD'] = rmseD
         dcRMSE['rmseS'] = rmseS
-        lsRMSE.append(dcRMSE)
+        if (lsRMSE is not None):
+            lsRMSE.append(dcRMSE)
         
         if(rmseR <= g_dMinrmseR):
             print("converged!! rmseR=%.4f" % rmseR)
@@ -164,6 +167,9 @@ def cmf(D, S, R, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE):
     return bu, bv, U, P, V, Q
 
 def visualizeRMSETrend(lsRMSE):
+    '''
+        This function visualize the changing of RMSE
+    '''
     df = pd.DataFrame(lsRMSE)
     df.plot(style='-o')
     plt.show()
