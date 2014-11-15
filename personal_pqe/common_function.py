@@ -13,6 +13,7 @@ import struct
 import socket
 import pickle
 import re
+import datetime
 
 def getFileList(strParentPath, strSuffix=None, strFileNamePattern=None):
     lsFiles = []
@@ -59,3 +60,12 @@ def deserializeFromFile(strFilePath):
     with open(strFilePath) as hFile:
         obj = pickle.load(hFile)
     return obj
+
+def getSecondofDay(nTimestamp):
+    dt = datetime.datetime.fromtimestamp(nTimestamp)
+    return (dt.hour*3600 + dt.minute*60 + dt.second)
+
+        
+    
+    
+    
