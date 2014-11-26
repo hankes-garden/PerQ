@@ -16,7 +16,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-g_dMinrmseR = 0.5
+g_dMinrmseR = 0.001
 gamma0 = 0.01
 power_t = 0.25
 g_nMaxStep = 1000
@@ -29,7 +29,7 @@ def getLearningRate(gamma, nIter):
     newGamma = gamma0 / pow(nIter+1, power_t)
     return newGamma
 
-def cmf(D, S, R, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None):
+def cmf(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None):
     '''
         This function factorize matrices simultaneously
         D = U·P^T
@@ -37,11 +37,11 @@ def cmf(D, S, R, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None)
         R = bu + bv + U·V^T
         
         params:
+            R - user-video matrix, m-by-n (sparse, 0 for unknown)
             D - user-profile matrix, m-by-l (dense)
             S - video-quality matrix, n-by-h (dense)
-            R - user-video matrix, m-by-n (sparse, 0 for unknown)
             arrAlphas - re-construction weights for R, D, S
-            arrLambdas - lambda for regularization
+            arrLambdas - lambda for regularization for R, D, S factorization
             f - number of latent factor
             dLearningRate - initial learning rate
             nMaxStep - max iteration
@@ -148,9 +148,9 @@ def cmf(D, S, R, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None)
         if (lsRMSE is not None):
             lsRMSE.append(dcRMSE)
         
-        if(rmseR <= g_dMinrmseR):
-            print("converged!! rmseR=%.4f" % rmseR)
-            break
+#         if(rmseR <= g_dMinrmseR):
+#             print("converged!! rmseR=%.4f" % rmseR)
+#             break
         
         #=======================================================================
         # debug
@@ -178,11 +178,11 @@ def visualizeRMSETrend(lsRMSE):
 def testCMF():
     # 5 users, 4 items
     R = [
-         [5,3,0,1],
-         [4,0,0,1],
-         [1,1,0,5],
-         [1,0,0,4],
-         [0,1,5,4],
+         [0.2,0.3,0.0,1.0],
+         [0.9,0.0,0.0,0.1],
+         [0.1,0.1,0.0,0.9],
+         [1.0,0.0,0.0,0.4],
+         [0.0,0.1,0.6,0.3],
         ]
     R = np.array(R)
 
@@ -198,10 +198,10 @@ def testCMF():
     
     # 4 items, 6 features
     S = [
-         [20.0, 100.8, 10.3, 0.34, 0.8, 4.0],
-         [105.0, 300.8, 40.3, 0.85, 0.3, 1.0],
-         [39.0, 200, 33.1, 0.45, 0.5, 6.0],
-         [58.0, 60.8, 2.3, 0.13, 0.95, 8],
+         [20.0, 10000.8, 10.3, 0.34, 0.8, 4.0],
+         [105.0, 30000.8, 40.3, 0.85, 0.3, 1.0],
+         [39.0, 20000, 33.1, 0.45, 0.5, 6.0],
+         [58.0, 6000.8, 2.3, 0.13, 0.95, 8],
         ]
     S = np.array(S)
     
@@ -216,9 +216,7 @@ def testCMF():
     
     # CMF
     lsRMSE = []
-    bu, bv, U, P, V, Q  = cmf(D, S, R, arrAlphas, arrLambdas, f, g_dLearningRate, g_nMaxStep, lsRMSE)
-    
-    visualizeRMSETrend(lsRMSE)
+    bu, bv, U, P, V, Q  = cmf(R, D, S, arrAlphas, arrLambdas, f, g_dLearningRate, 10, lsRMSE)
     
     print "bu= ", bu
     print "bv= ", bv
@@ -226,6 +224,8 @@ def testCMF():
     print "P= ", P
     print "V= ", V
     print "Q= ", Q
+    
+    visualizeRMSETrend(lsRMSE)
     
     return lsRMSE
     

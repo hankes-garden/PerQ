@@ -44,7 +44,7 @@ def discretizeColumn(srColumn, func=None):
 
 def digitalizeColumn(srColumn):
     '''
-        digitalize string columns into integer
+        digitalize string columns into integer   
     '''
     # no need to digitalise
     if ( not (srColumn.name in g_lsColumns2Digitalize) or not (isinstance(srColumn[0], basestring)) ):
@@ -74,8 +74,8 @@ def transform2VideoQualityMatrix(df):
     '''
    
     #===========================================================================
-    # 
-    # columns = ['BEGIN_TIME','BEGIN_TIME_MSEL','MSISDN','IMSI',\
+    # intial columns:
+    #          ['BEGIN_TIME','BEGIN_TIME_MSEL','MSISDN','IMSI',\
     #          'SERVER_IP','SERVER_PORT','APN','PROT_CATEGORY',\
     #          'PROT_TYPE','LAC','SAC','CI','IMEI','RAT','HOST',\
     #          'STREAMING_URL','STREAMING_FILESIZE','STREAMING_DW_PACKETS',\
@@ -126,7 +126,7 @@ def transform2VideoQualityMatrix(df):
     del dfStreaming['CI']
     
     # DW_SPEEDvalid_records_new
-    dfStreaming['STREAMING_DOWNLOAD_DELAY'].replace(0,1, inplace=True)
+    dfStreaming['STREAMING_DOWNLOAD_DELAY'].replace(0, 1, inplace=True)
     dfStreaming['STREAMING_DW_SPEED'] = dfStreaming['STREAMING_DW_PACKETS']*1.0/dfStreaming['STREAMING_DOWNLOAD_DELAY']
     del dfStreaming['STREAMING_DW_PACKETS']
     del dfStreaming['STREAMING_DOWNLOAD_DELAY']
@@ -141,12 +141,12 @@ def transform2VideoQualityMatrix(df):
         func = None
         if srColumn.name == 'BEGIN_TIME':
             func = cf.getSecondofDay
+            
         arrCuts = discretizeColumn(srColumn, func)
         if arrCuts is not None:
             dfStreaming[col] = arrCuts
         
         # digitalize categorical data
-        
         arrDigits, dcMappingTable = digitalizeColumn(srColumn)
         if arrDigits is not None:
             dfStreaming[col] = arrDigits
@@ -155,7 +155,8 @@ def transform2VideoQualityMatrix(df):
             
             
      #==========================================================================
-     # ['BEGIN_TIME',
+     # data now 
+     #['BEGIN_TIME',
      # 'IMSI',
      # 'APN',
      # 'PROT_TYPE',
