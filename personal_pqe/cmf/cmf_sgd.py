@@ -15,21 +15,24 @@ Brief Description:
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import sklearn.preprocessing as prepro
 
-g_dMinrmseR = 0.001
-gamma0 = 0.01
-power_t = 0.25
+g_dMinrmseR = 0.1
+g_gamma0 = 0.01
+g_power_t = 0.25
 g_nMaxStep = 1000
-g_dLearningRate = 0.05
+g_dLearningRate = 0.01
 
 def getLearningRate(gamma, nIter):
     '''
-        dynamically change learning rate w.r.t #iteration
+        dynamically change learning rate w.r.t #iteration (using sklearn default: eta = eta0 / pow(t, g_power_t) )
     '''
-    newGamma = gamma0 / pow(nIter+1, power_t)
+    newGamma = g_gamma0 / pow(nIter+1, g_power_t)
     return newGamma
+#     return np.log2(nIter+1) / (nIter+1.0) # set to log(n)/n
 
-def cmf(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None):
+
+def fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None):
     '''
         This function factorize matrices simultaneously
         D = U·P^T
@@ -69,32 +72,42 @@ def cmf(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None)
     Q = np.random.rand(S.shape[1], f)
     
     # R = B_u + B_v + U·V^T
-    bu = np.random.rand(R.shape[0]) # B_u is m-by-n, with same values in a row
-    bv = np.random.rand(R.shape[1]) # B_v is m-by-n, with identical values in a column
+    bu = np.random.rand(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
+    bv = np.random.rand(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
     
     # weight matrix for sparse matrices
     weightR = np.where(R<>0, 1.0, 0.0)
     weightS = np.where(S<>0, 1.0, 0.0)
     weightD = np.where(D<>0, 1.0, 0.0)
     
+    #===========================================================================
+    # normalize (R does not need to normalize)
+    #===========================================================================
+    normD = prepro.normalize(D, axis=1)
+    normS = prepro.normalize(S, axis=1)
+    
     nUsers = R.shape[0]
     nVideos = R.shape[1]
     for step in xrange(0, nMaxStep):
+        
+        # get learning rate
+        gamma = getLearningRate(gamma, step)
+        
         # compute error in R
-#         predR =  np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape((1, nVideos)) # use broadcast to add on each row/column
-        predR =  np.dot(U, V.T)
+        predR =  np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape((1, nVideos)) # use broadcast to add on each row/column
+#         predR =  np.dot(U, V.T)
         _predR = np.multiply(weightR, predR)
         errorR = np.subtract(R, _predR)
         
-        # compute error in D
+        # compute error in normD
         predD = np.dot(U, P.T)
         _predD = np.multiply(weightD, predD)
-        errorD = np.subtract(D, _predD)
+        errorD = np.subtract(normD, _predD)
         
-        # compute error in S
+        # compute error in normS
         predS = np.dot(V, Q.T)
         _predS = np.multiply(weightS, predS)
-        errorS = np.subtract(S, _predS)
+        errorS = np.subtract(normS, _predS)
         
         #=======================================================================
         # update
@@ -148,21 +161,18 @@ def cmf(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None)
         if (lsRMSE is not None):
             lsRMSE.append(dcRMSE)
         
-#         if(rmseR <= g_dMinrmseR):
-#             print("converged!! rmseR=%.4f" % rmseR)
-#             break
+        if(rmseR <= g_dMinrmseR):
+            print("converged!! rmseR=%.4f" % rmseR)
+            break
         
         #=======================================================================
         # debug
         print("step#: %d   r=%.4f" % (step, gamma) )
         print("    RMSE(R) = %.4f" % rmseR )
-        print("    RMSE(D) = %.4f" % rmseD )
-        print("    RMSE(S) = %.4f" % rmseS )
+        print("    RMSE(normD) = %.4f" % rmseD )
+        print("    RMSE(normS) = %.4f" % rmseS )
         print("------------------------------")
         #=======================================================================
-        
-        # change gamma
-        gamma = getLearningRate(gamma, step)
         
     return bu, bv, U, P, V, Q
 
@@ -198,10 +208,10 @@ def testCMF():
     
     # 4 items, 6 features
     S = [
-         [20.0, 10000.8, 10.3, 0.34, 0.8, 4.0],
-         [105.0, 30000.8, 40.3, 0.85, 0.3, 1.0],
-         [39.0, 20000, 33.1, 0.45, 0.5, 6.0],
-         [58.0, 6000.8, 2.3, 0.13, 0.95, 8],
+         [20.0, 20.8, 10.3, 0.34, 0.8, 40.0],
+         [105.0, 40.8, 40.3, 0.85, 0.3, 10.0],
+         [39.0, 80.0, 33.1, 0.45, 0.5, 60.0],
+         [58.0, 30.8, 2.3, 0.13, 0.95, 80.0],
         ]
     S = np.array(S)
     
@@ -214,9 +224,13 @@ def testCMF():
     # latent factors
     f = 3
     
+    # normalize
+    normD = prepro.normalize(D, axis=1)
+    normS = prepro.normalize(S, axis=1)
+    
     # CMF
     lsRMSE = []
-    bu, bv, U, P, V, Q  = cmf(R, D, S, arrAlphas, arrLambdas, f, g_dLearningRate, 10, lsRMSE)
+    bu, bv, U, P, V, Q  = fit(R, normD, normS, arrAlphas, arrLambdas, f, g_dLearningRate, 1000, lsRMSE)
     
     print "bu= ", bu
     print "bv= ", bv
