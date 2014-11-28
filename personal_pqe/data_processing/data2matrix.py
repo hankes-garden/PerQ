@@ -103,7 +103,11 @@ def transform2VideoQualityMatrixEx(dfData, lsColumns2Delete, dcColumns2Discretiz
         - discretize continuous data
         - digitalize & mapping categorical data
         - transfrom into R, dfD, dfS matrices
+        
     '''
+    # TODO: how to handle NAN?
+    
+    
     #===========================================================================
     # delete useless columns
     #===========================================================================
@@ -118,10 +122,11 @@ def transform2VideoQualityMatrixEx(dfData, lsColumns2Delete, dcColumns2Discretiz
     for (strColName,lsBins) in dcColumns2Discretize.iteritems():
         sCol = dfData[strColName]
 
-        func = None
-        arrCuts = discretizeColumnEx(sCol, lsBins, func)
+        arrCuts = discretizeColumnEx(sCol, lsBins, None)
         if arrCuts is not None:
             dfData[strColName] = arrCuts
+        else:
+            print ("discretize")
         
     
     #===========================================================================
@@ -163,11 +168,12 @@ def transform2VideoQualityMatrixEx(dfData, lsColumns2Delete, dcColumns2Discretiz
     # transfrom into D
     #===========================================================================
     print("start to transfrom into D...")
-    arrUID = np.array(dfData[strUserIDColumnName].tolist() )
-    arrUniqueUsers, arrIndex = np.unique(arrUID, return_index=True)
-    lsCol = lsUserProfileColumns
-    lsCol.append(strUserIDColumnName)
-    dfD = dfData.loc[arrIndex.astype(int).tolist()][lsCol]
+#     arrUID = np.array(dfData[strUserIDColumnName].tolist() )
+#     arrUniqueUsers, arrIndex = np.unique(arrUID, return_index=True)
+#     dfD = dfData.loc[arrIndex.astype(int).tolist()][ lsUserProfileColumns+[strUserIDColumnName,] ]
+    
+    # delete duplicated rows, note: don't change the index
+    dfD = dfData.drop_duplicates(strUserIDColumnName)[ lsUserProfileColumns+[strUserIDColumnName,] ]
     
     lsUsers = dfD[strUserIDColumnName].tolist()
     
@@ -179,13 +185,12 @@ def transform2VideoQualityMatrixEx(dfData, lsColumns2Delete, dcColumns2Discretiz
     print("start to transform into S...")
     dcS ={}
     dcVideoRatio = {} # to remember labels attached to each video 
+    nCount = 0
     for ind, row in dfData.iterrows():
-        if (ind % 100 == 0):
-            print("%.2f%%" % (ind.astype(float)*100.0/len(dfData)) )
+        if (nCount % 100 == 0):
+            print("%.2f%%" % (nCount*100.0/len(dfData)) )
             
-        lsCol = lsVideoQualityColumns
-        lsCol.append(strVideoIDColumnName)
-        sVideo = row.loc[lsCol]
+        sVideo = row.loc[ lsVideoQualityColumns+[strVideoIDColumnName, ] ]
         strKey = sVideo.to_string()         # use vid + video qualities as key
         uid = row[strUserIDColumnName]      # user of current row
         dLabel = row[strLabelColumnName]    # label of current row
@@ -200,11 +205,13 @@ def transform2VideoQualityMatrixEx(dfData, lsColumns2Delete, dcColumns2Discretiz
             dcVideoRatio[strKey] = dcUserLabel
         
         dcUserLabel[uid] = dLabel
+        nCount += 1
     
-    dfS = pd.DataFrame(dcS).T
-    lsVideos = dfS.columns.tolist()
+    dfS = pd.DataFrame(dcS).T.convert_objects(convert_numeric = True)
+    lsVideos = dfS.index.tolist()
     
     del dfS[strVideoIDColumnName] # do not include vid in S
+   
     
     #===========================================================================
     # transform into R
@@ -424,7 +431,7 @@ def transformNJData(strDataPath):
         transform NJ dataset into R, D, S matrices
         
         Note:
-             1. before load data, please manually replace all the 'none' with '' in
+             1. before loading data, please manually replace all the 'none' with '' in
                 original dataset. 
     '''
     
@@ -439,6 +446,7 @@ def transformNJData(strDataPath):
     # filter invalid rows out
     dfData = dfData[ (dfData['viewing time ratio']>=0.0) & (dfData['viewing time ratio']<=1.0) & \
                     (dfData['user MAC'] != np.nan) & (dfData['vid'] != np.nan) ]
+    print ("%d rows have been loaded." % len(dfData) )
     
     #===========================================================================
     # setup transform rules

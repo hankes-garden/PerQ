@@ -32,7 +32,7 @@ def getLearningRate(gamma, nIter):
 #     return np.log2(nIter+1) / (nIter+1.0) # set to log(n)/n
 
 
-def fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None):
+def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None):
     '''
         This function factorize matrices simultaneously
         D = U·P^T
@@ -61,6 +61,10 @@ def fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None)
     #===========================================================================
     # init
     #===========================================================================
+    R = np.copy(mtR)
+    D = np.copy(mtD)
+    S = np.copy(mtS)
+    
     gamma = dLearningRate
     
     # D = U·V^T
@@ -76,9 +80,14 @@ def fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE=None)
     bv = np.random.rand(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
     
     # weight matrix for sparse matrices
-    weightR = np.where(R<>0, 1.0, 0.0)
-    weightS = np.where(S<>0, 1.0, 0.0)
-    weightD = np.where(D<>0, 1.0, 0.0)
+    weightR = np.where(np.isnan(R), 0.0, 1.0)
+    weightS = np.where(np.isnan(S), 0.0, 1.0)
+    weightD = np.where(np.isnan(D), 0.0, 1.0)
+    
+    R[np.isnan(R)] = 0.0
+    D[np.isnan(D)] = 0.0
+    S[np.isnan(S)] = 0.0
+    
     
     #===========================================================================
     # normalize (R does not need to normalize)
