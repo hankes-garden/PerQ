@@ -15,12 +15,18 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.feature_extraction import DictVectorizer
 from sklearn import cross_validation
 import operator
+
 import matplotlib.pyplot as plt
+import matplotlib.markers as mk
+import matplotlib.cm as mplcm
+import matplotlib.colors as colors
 
 
 g_lsSelectedColumns = [0,4,7,8,9,10,16,18,20,21]
 g_lsNumericColumns = [0,16,18,20,21]
 g_lsCategoricalColumns = []
+
+g_strModuleNameForAllUser = 'all users'
 
 g_modelParams = {'n_estimators':100, 'loss':'lad'} 
  
@@ -43,7 +49,7 @@ def recordTruePredict(wfn, gbr, x_valid, y_valid):
     print 'Relative Absolute Error: %.4f' % (relatedError/len(y_valid))
     
     
-def preprocessDataSet(dfData, lsSelectedColumns, lsNumericColumns, lsCategoricalColumns):
+def preprocessDataSet(dfData, lsNumericColumns, lsCategoricalColumns, strLabelColumn):
     '''
         This function selects given columns, maps categorical and integer columns.
     '''
@@ -52,11 +58,11 @@ def preprocessDataSet(dfData, lsSelectedColumns, lsNumericColumns, lsCategorical
     dfData.fillna(0, inplace=True)
     
     # numeric columns
-    dfNumVariables = dfData.iloc[:, lsNumericColumns]
+    dfNumVariables = dfData.ix[:, lsNumericColumns]
     arrNumVariables = dfNumVariables.as_matrix()
     
     # categorical columns
-    dfCateVariables = dfData.iloc[:,lsCategoricalColumns]
+    dfCateVariables = dfData.ix[:,lsCategoricalColumns]
     vec =  DictVectorizer(sparse=False)
     arrCateFeatures = vec.fit_transform(dfCateVariables.T.to_dict().values())
     
@@ -65,7 +71,7 @@ def preprocessDataSet(dfData, lsSelectedColumns, lsNumericColumns, lsCategorical
     lsVariableNames = dfNumVariables.columns.tolist()
     lsVariableNames += vec.get_feature_names()
     
-    arrY = dfData['DOWNLOAD_RATIO'].values
+    arrY = dfData[strLabelColumn].values
     
     return arrX, arrY, lsVariableNames
 
@@ -131,7 +137,7 @@ def drawVariableImportance(dfVariableImportance):
     ax.set_xticklabels(dfVariableImportance.T.index.tolist(), rotation=90)
     plt.show()
     
-def execute(strInPath, strOutPath, bSerialize=False):
+def testOnSH(strInPath, strOutPath, bSerialize=False):
     '''
         this function trains model for each user and compares with the model trained from all users
     '''
@@ -157,7 +163,8 @@ def execute(strInPath, strOutPath, bSerialize=False):
         # prepare data set
         arrX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfData, g_lsSelectedColumns, \
                                                                                 g_lsNumericColumns, \
-                                                                                g_lsCategoricalColumns)
+                                                                                g_lsCategoricalColumns,\
+                                                                                'DOWNLOAD_RATIO')
         
 #         # train model
 #         model = trainModel(arrX, arrY, g_modelParams)
@@ -186,8 +193,166 @@ def execute(strInPath, strOutPath, bSerialize=False):
         dfVariableImportance.to_csv(strOutPath+'dfVariableImportance_all.out')
         
     return dcModels, dfVariableImportance
+
+def testOnNJ(strInPath, strOutPath, bSerialize=False):
+    '''
+        this function trains model for each user and compares with the model trained from all users
         
+        return:
+                dcModels - {uid: model}
+                dfVariableImportance.T - row:uid, column:variable importance
+    '''
+    #===========================================================================
+    # setup transform rules
+    #===========================================================================
+    lsColumns2Delete = ['up', 'down', 'playtimes', 'normalized popratio', 'month', 'day',\
+                        'starttime', 'endtime', 'signal strength', 'data variance1', 'data variance2',\
+                        'data variance3', 'data variance4', 'average first 10s data rate',\
+                        'absolute deviation of data variance (Median)',\
+                        'absolute deviation of data variance (Mode)']
     
+    dcColumns2Discretize = {'rebuffer time': [10, 20, 30, 40, 50], \
+                            'totaltime ': [10*60, 30*60, 60*60],\
+                            'average data rate': [20,40,60,80,100,120],\
+                            'last 10s rateratio':[0.9, 1.5],\
+                            'popratio': [0.5, 0.8],\
+                            'startup delay': [10, 30, 60, 90, 120],\
+                            'data variance':[10,20,30,40],\
+                            'average signal strength': [-20, -40, -60],\
+                            'first 10s rateratio': [0.5, 1.0, 1.5, 2.0],\
+                            'absolute deviation of data variance (Mean)':[10,20,30],\
+                            'p-norm of data variance(P=3)': [50,100,150,200,250],\
+                            }
+    
+    lsColumns2Vectorize = ['AP MAC', 'week day', 'PC/mobile', 'video website', 'gender', 'grade']
+    strLabelColumnName = "viewing time ratio"
+    strUserIDColumnName = "user MAC"
+    lsUserProfileColumns = ['gender', 'grade']
+    strVideoIDColumnName = "vid"
+    lsVideoQualityColumns = ['rebuffer time', 'totaltime ', 'average data rate', 'last 10s rateratio',\
+                             'popratio', 'startup delay', 'AP MAC', 'week day', 'data variance',\
+                             'PC/mobile', 'resolution', 'average signal strength',  'first 10s rateratio',\
+                             'absolute deviation of data variance (Mean)', 'p-norm of data variance(P=3)',\
+                             'video website']
+    
+    #===========================================================================
+    # load & filter invalid rows and columns
+    #===========================================================================
+    dfAllData = pd.read_csv(strInPath)
+    
+    # filter invalid rows out
+    dfAllData = dfAllData[ (dfAllData['viewing time ratio']>=0.0) & (dfAllData['viewing time ratio']<=1.0) & \
+                    (dfAllData['user MAC'] != np.nan) & (dfAllData['vid'] != np.nan) ]
+    
+    for col in lsColumns2Delete:
+        del dfAllData[col]
+        
+    print ("%d rows * %d columns have been loaded." % (len(dfAllData), len(dfAllData.columns) ) )
+    
+    #===========================================================================
+    # find Top Users
+    #===========================================================================
+    lsDataofEachUser = []
+    arrUniqueUsers = dfAllData[strUserIDColumnName].unique()
+    for uid in arrUniqueUsers:
+        _df = dfAllData[dfAllData[strUserIDColumnName] == uid]
+        lsDataofEachUser.append( (len(_df), _df) )
+    
+    lsDataofEachUser.sort(key=lambda x:x[0], reverse=True)
+    lsTopUsers = lsDataofEachUser[:5]
+    
+    #===========================================================================
+    # train personal model for top 10 users
+    #===========================================================================
+    dcVariableImportance = {}           # variable importance of each personal model
+    dcModels = {}                       # dict of personal models
+    uNum = 0
+    for (nDataNum, dfUserRecord) in lsTopUsers:
+        
+        strUid = dfUserRecord[strUserIDColumnName].iloc[0]
+        print("processing %s (%d rows)..." % (strUid, nDataNum) )
+        
+        del dfUserRecord[strUserIDColumnName]
+        del dfUserRecord[strVideoIDColumnName]
+                
+        # prepare data set
+        arrX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfUserRecord, dcColumns2Discretize.keys(), \
+                                                               lsColumns2Vectorize, strLabelColumnName)
+        
+        # train model
+        model = trainModel(arrX, arrY, g_modelParams)
+        dcVariableImportance["user %d" % uNum] = getVariableImportance(model, lsTrainingFeatureNames)
+           
+        # test
+        mse = mean_squared_error(arrY, model.predict(arrX) )
+        mae = mean_absolute_error(arrY, model.predict(arrX) )
+        print("    MSE: %.4f, MAE: %.4f" % (mse, mae) )
+        uNum += 1
+        
+#         # cross validation
+#         dcPersonalModels = crossValidate(arrX, arrY, g_modelParams, 3)
+#         bestModel, fBestScore = max(dcPersonalModels.iteritems(), key=operator.itemgetter(1) )
+#         dcVariableImportance[strUid] = getVariableImportance(bestModel, lsTrainingFeatureNames)
+#         
+#         dcModels[strUid] = (fBestScore, bestModel)
+# 
+#         print("model:%s, #record=%d, best=%0.2f, mean=%.2f, std=%0.2f. \n)" % \
+#               (strUid, len(arrY), fBestScore, np.mean(dcPersonalModels.values() ), np.std(dcPersonalModels.values() ) ) )
+
+    #===========================================================================
+    # train model  for all users    
+    #===========================================================================
+    print("processing all data (%d rows)..." % (len(dfAllData)) )
+    
+    del dfAllData[strUserIDColumnName]
+    del dfAllData[strVideoIDColumnName]
+            
+    # prepare data set
+    arrX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfAllData, dcColumns2Discretize.keys(), \
+                                                           lsColumns2Vectorize, strLabelColumnName)
+    
+    # train model
+    model = trainModel(arrX, arrY, g_modelParams)
+    dcVariableImportance[g_strModuleNameForAllUser] = getVariableImportance(model, lsTrainingFeatureNames)
+       
+    # test
+    mse = mean_squared_error(arrY, model.predict(arrX) )
+    mae = mean_absolute_error(arrY, model.predict(arrX) )
+    print("    MSE: %.4f, MAE: %.4f" % (mse, mae) )
+    
+    dfVariableImportance = pd.DataFrame(dcVariableImportance).T
+
+
+#     # serialize models
+#     if(bSerialize is True):
+#         common_function.serialize2File(strOutPath+'serDcModels.out', dcPersonalModels)
+#         dfVariableImportance.to_csv(strOutPath+'dfVariableImportance_all.out')
+        
+    return dcModels, dfVariableImportance.T
+
+
+def visualizeVariableImportance(dfVariableImportance):
+    
+    # create single plot in a figure
+    ax0 = plt.figure().add_subplot(111) # note it is figure(), not Figure()!
+    axDraw = dfVariableImportance.plot(ax=ax0, ls='--')
+    
+    # set line for all user
+    lines = axDraw.get_lines()
+    for line in lines:
+        if line.get_label() == 'all viewers':
+            line.set_linewidth(2)
+            line.set_linestyle('-')
+    
+    ax0.set_ylabel('weight')
+    plt.xticks(range(len(dfVariableImportance.index)),dfVariableImportance.index.tolist())
+    plt.setp(plt.xticks()[1], rotation=90)
+    plt.legend(loc='upper left')
+    plt.show()
+        
+if __name__ == '__main__':
+    dcModels, dfVariableImportance = testOnNJ("d:\\playground\\sh_xdr\\nj\\all_with_router_info.csv", "d:\\playground\\sh_xdr\\nj\\observation_validation\\", False)
+    visualizeVariableImportance(dfVariableImportance)
     
     
     

@@ -9,8 +9,6 @@ import pandas as pd
 import numpy as np
 import sklearn.preprocessing as prepro
 
-
-
 g_dcColumns2Discritize = {'BEGIN_TIME': [7*3600,9*3600,12*3600,14*3600,18*3600,20*3600], \
                           'STREAMING_FILESIZE': [10.0, 50.0, 100.0, 200.0, 300.0, 400.0],\
                           'STREAMING_DW_SPEED': [50.0, 100,0, 150.0, 200.0, 250.0, 300.0],\

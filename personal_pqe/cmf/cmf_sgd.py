@@ -16,8 +16,9 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import sklearn.preprocessing as prepro
+from matplotlib.pyplot import yticks
 
-g_dMinrmseR = 0.1
+g_dMinrmseR = 0.05
 g_gamma0 = 0.01
 g_power_t = 0.25
 g_nMaxStep = 1000
@@ -27,8 +28,9 @@ def getLearningRate(gamma, nIter):
     '''
         dynamically change learning rate w.r.t #iteration (using sklearn default: eta = eta0 / pow(t, g_power_t) )
     '''
-    newGamma = g_gamma0 / pow(nIter+1, g_power_t)
-    return newGamma
+    return 0.01
+#     newGamma = g_gamma0 / pow(nIter+1, g_power_t)
+#     return newGamma
 #     return np.log2(nIter+1) / (nIter+1.0) # set to log(n)/n
 
 
@@ -190,7 +192,12 @@ def visualizeRMSETrend(lsRMSE):
         This function visualize the changing of RMSE
     '''
     df = pd.DataFrame(lsRMSE)
-    df.plot(style='-o')
+    df = df[['rmseD', 'rmseS', 'rmseR']]
+    df.columns = ['D', 'S', 'R']
+    lsSamples = range(0,1000,10)
+    lsSamples.append(999)
+    ax = df.iloc[lsSamples].plot(yticks=np.arange(0, 1, 0.05), ylim=(0.0,1.0), style=['--','-.', '-' ])
+    ax.set_ylabel('RMSE')
     plt.show()
     
 
