@@ -15,11 +15,7 @@ from sklearn.metrics import mean_absolute_error
 from sklearn.feature_extraction import DictVectorizer
 from sklearn import cross_validation
 import operator
-
 import matplotlib.pyplot as plt
-import matplotlib.markers as mk
-import matplotlib.cm as mplcm
-import matplotlib.colors as colors
 
 
 g_lsSelectedColumns = [0,4,7,8,9,10,16,18,20,21]
@@ -137,9 +133,16 @@ def drawVariableImportance(dfVariableImportance):
     ax.set_xticklabels(dfVariableImportance.T.index.tolist(), rotation=90)
     plt.show()
     
-def testOnSH(strInPath, strOutPath, bSerialize=False):
+def validateOnSH(strInPath, strOutPath, bSerialize=False):
     '''
-        this function trains model for each user and compares with the model trained from all users
+        this function validates user diversity on Shanghai data set
+        
+        param:
+                strInPath  - path for separate files of top users
+                strOutPath - path to serialize model
+        
+        Note: we need another script to distributes records of top users into separate files,
+              and this function will only read separate files from strInPath
     '''
     # find xdr
     lsXDR = common_function.getFileList(strInPath, "out")
@@ -194,10 +197,9 @@ def testOnSH(strInPath, strOutPath, bSerialize=False):
         
     return dcModels, dfVariableImportance
 
-def testOnNJ(strInPath, strOutPath, bSerialize=False):
+def validateOnNJ(strInPath, strOutPath, bSerialize=False):
     '''
-        this function trains model for each user and compares with the model trained from all users
-        
+        this function validate user diversity on Nanjin data set
         return:
                 dcModels - {uid: model}
                 dfVariableImportance.T - row:uid, column:variable importance
@@ -351,7 +353,7 @@ def visualizeVariableImportance(dfVariableImportance):
     plt.show()
         
 if __name__ == '__main__':
-    dcModels, dfVariableImportance = testOnNJ("d:\\playground\\sh_xdr\\nj\\all_with_router_info.csv", "d:\\playground\\sh_xdr\\nj\\observation_validation\\", False)
+    dcModels, dfVariableImportance = validateOnNJ("d:\\playground\\sh_xdr\\nj\\all_with_router_info.csv", "d:\\playground\\sh_xdr\\nj\\observation_validation\\", False)
     visualizeVariableImportance(dfVariableImportance)
     
     
