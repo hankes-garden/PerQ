@@ -75,21 +75,28 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
     S = np.copy(mtS)
     
     # D = U·P^T
-    U = np.random.rand(D.shape[0], f)
-    P = np.random.rand(D.shape[1], f)
+#     U = np.random.rand(D.shape[0], f)
+#     P = np.random.rand(D.shape[1], f)
+    U = np.zeros((D.shape[0], f) )
+    P = np.zeros((D.shape[1], f) )
     
     # S = V·Q^T
-    V = np.random.rand(S.shape[0], f)
-    Q = np.random.rand(S.shape[1], f)
+#     V = np.random.rand(S.shape[0], f)
+#     Q = np.random.rand(S.shape[1], f)
+    V = np.zeros( (S.shape[0], f) )
+    Q = np.zeros( (S.shape[1], f) )
     
     # R = B_u + B_v + U·V^T
-    bu = np.random.rand(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
-    bv = np.random.rand(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
-    
+#     bu = np.random.rand(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
+#     bv = np.random.rand(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
+
+    bu = np.zeros(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
+    bv = np.zeros(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
+
     # weight matrix for sparse matrices, need to be done before filling nan
     weightR = np.where(np.isnan(R), 0.0, 1.0)
-    weightS = np.where(np.isnan(S), 0.0, 1.0)
     weightD = np.where(np.isnan(D), 0.0, 1.0)
+    weightS = np.where(np.isnan(S), 0.0, 1.0)
     
     # fill nan with zeros
     R[np.isnan(R)] = 0.0
@@ -109,6 +116,10 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
     weightR_test = np.zeros(weightR.shape)
     weightR_test[arrNonzeroRows[ix], arrNonzeroCols[ix]] = 1.0
     
+    
+    # mu has to be calculated after masking test data
+    mu = (R.sum()*1.0)/(weightR<>0).sum()
+    
     #===========================================================================
     # trainning
     #===========================================================================
@@ -126,7 +137,7 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
         gamma = getLearningRate(gamma, step)
         
         # compute error in R
-        predR =  np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) # use broadcast to add on each row/column
+        predR =  (np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) ) + mu # use broadcast to add on each row/column
         _errorR = np.subtract(R, predR)
         errorR = np.multiply(weightR, _errorR)
         
@@ -211,7 +222,7 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
     # test
     #===========================================================================
     print("==Testing===========================================")
-    predR_test =  np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) # use broadcast to add on each row/column
+    predR_test =  (np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) ) + mu # use broadcast to add on each row/column
     _errorR_test = np.subtract(R, predR_test)
     errorR_test = np.multiply(weightR_test, _errorR_test)
     rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / (weightR_test<>0).sum() )
@@ -219,7 +230,7 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
     print("test result: %.2f" % rmseR_test)
     
     
-    return bu, bv, U, P, V, Q, rmseR_test
+    return mu, bu, bv, U, P, V, Q, rmseR_test
 
 def visualizeRMSETrend(lsRMSE):
     '''
