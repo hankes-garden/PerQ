@@ -1,0 +1,31 @@
+hive> desc stream;
+OK
+begin_time	bigint	
+begin_time_msel	int	
+msisdn	string	
+imsi	string	
+server_ip	string	
+server_port	string	
+apn	string	
+prot_category	string	
+prot_type	string	
+lac	string	
+sac	string	
+ci	string	
+imei	string	
+rat	string	
+host	string	
+streaming_url	string	
+streaming_filesize	double	
+streaming_dw_packets	double	
+streaming_download_delay	double	
+associated_id	string	
+l4_ul_throughput	double	
+l4_dw_throughput	double	
+intbuffer_full_flag	string	
+tcp_rtt	double	
+get_streaming_delay	double	
+intbuffer_full_delay	double	
+sid	string	
+date_partition	string	
+Time taken: 0.14 seconds

@@ -35,7 +35,7 @@ def train(strDataPath):
     
     cmf.visualizeRMSETrend(lsRMSE)
     
-def multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep=500):
+def multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio):
     #===========================================================================
     # load data & transform into matrix
     #===========================================================================
@@ -66,18 +66,18 @@ def multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f
         print 'arrlambdas', arrLambdas
         print 'f', f
         print("---------------------------------------------------------------------")
-        bu, bv, U, P, V, Q  = cmf.fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE )
+        bu, bv, U, P, V, Q, rmseR  = cmf.fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE, dTestRatio )
         
         if type(lsParamSets[i]) is np.ndarray:
-            dcResult[lsParamSets[i][0]] = lsRMSE[-1] # choose param for R as key
+            dcResult[lsParamSets[i][0]] = (lsRMSE[-1], rmseR) # choose param for R as key
         else:
-            dcResult[lsParamSets[i]] = lsRMSE[-1]
+            dcResult[lsParamSets[i]] = (lsRMSE[-1], rmseR)
         
     print("%d trials have been finished" % nTrials)
     
     return dcResult
 
-def invetigateLambda(strInPath):
+def invetigateLambda(strInPath, nMaxStep):
     
     #===========================================================================
     # initial params
@@ -86,7 +86,7 @@ def invetigateLambda(strInPath):
     arrLambdas = np.array([0.4,0.3,0.3])
     f = 5
     dLearningRate = 0.01
-    nMaxStep = 400
+    dTestRatio = 0.2
     
     #===========================================================================
     # set different settings
@@ -103,7 +103,9 @@ def invetigateLambda(strInPath):
     #===========================================================================
     # test different settings    
     #===========================================================================
-    dcResult = multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep)
+    dcResult = multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio)
+    
+    return dcResult
 
 
 

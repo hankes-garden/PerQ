@@ -20,20 +20,23 @@ g_dcDigitMappingTable = {}
 
 def discretizeColumnEx(srColumn, lsBins, func=None):
     '''
-        discretize value based on predefined bins
+        discretize value based on predefined bins,
+        if none is given, then cut by 25%, 50%, 75%
     '''
     strName = srColumn.name
-    if lsBins is None:
-        return None
+    if lsBins is None: # cut according to its distribution
+        sStat = srColumn.describe()
+        lsBins = [sStat['25%'], sStat['mean'], sStat['75%'] ]
     else:
         if func is not None:
             srColumn = srColumn.apply(func)
         
-        lsBins.append(srColumn.min() )
-        lsBins.append(srColumn.max() )
-        lsBins.sort()
+    lsBins.append(srColumn.min() )
+    lsBins.append(srColumn.max() )
+    lsBins = np.unique(lsBins).tolist()
+    lsBins.sort()
         
-        arrCuts = pd.cut(srColumn, bins=lsBins, labels=False)
+    arrCuts = pd.cut(srColumn, bins=lsBins, labels=False)
     
     return arrCuts
 
@@ -63,7 +66,7 @@ def digitalizeColumnEx(srColumn):
     '''
         
     # digitalise
-    arrUniqueValues, arrIndex = np.unique(srColumn, return_inverse=True)
+    arrUniqueValues, arrIndex = np.unique(srColumn.fillna(value=-1), return_inverse=True)
     
     dcMappingtable = {}
     for i in xrange(len(arrUniqueValues)):
@@ -404,25 +407,6 @@ def transform2VideoQualityMatrix(df):
     
     return dfR.as_matrix(), dfStreaming.as_matrix()
         
-
-def testOnSH():
-    #===========================================================================
-    # load data
-    #===========================================================================
-    dfStreaming = pd.read_csv('/media/data/playground/sh_xdr/test.out', sep='|', \
-                              names= ['BEGIN_TIME','BEGIN_TIME_MSEL','MSISDN','IMSI',\
-                                      'SERVER_IP','SERVER_PORT','APN','PROT_CATEGORY',\
-                                      'PROT_TYPE','LAC','SAC','CI','IMEI','RAT','HOST',\
-                                      'STREAMING_URL','STREAMING_FILESIZE','STREAMING_DW_PACKETS',\
-                                      'STREAMING_DOWNLOAD_DELAY','ASSOCIATED_ID','L4_UL_THROUGHPUT',\
-                                      'L4_DW_THROUGHPUT', 'INTBUFFER_FULL_FLAG', 'TCP_RTT', \
-                                      'GET_STREAMING_DELAY', 'INTBUFFER_FULL_DELAY', 'SID', 'use_less'] )
-    del dfStreaming['use_less']
-    
-    R, dfS = transform2VideoQualityMatrix(dfStreaming)
-    assert(R.shape[1] == dfS.shape[0])
-    
-    return R, dfS
     
 def transformNJData(strDataPath):
     '''
@@ -488,6 +472,390 @@ def transformNJData(strDataPath):
                                    strVideoIDColumnName, lsVideoQualityColumns)
     
     return R, D, S
+
+
+def transformSHData(strUserFilePath, strVideoFilePath):
+    '''
+        This function transform shanghai data set to R, S, D matrices.
+        Namely, this function does the following tasks:
+        1. load data;
+        2. add columns;
+        3. setup transform rules;
+        4. transform data set to matrices;
+        
+        Note:
+        
+            user features = 
+                ['localbase_outer_call_dur', 'ld_call_dur', 'roam_call_dur', \
+                'localbase_called_dur', 'ld_called_dur', 'roam_called_dur', \
+                'cm_dur', 'ct_dur', 'busy_call_dur', 'fest_call_dur', 'sms_p2p_mo_cnt', \
+                'sms_p2p_inter_mo_cnt', 'sms_p2p_inner_mo_cnt', 'sms_p2p_other_mo_cnt', \
+                'sms_p2p_cm_mo_cnt', 'sms_p2p_ct_mo_cnt', 'sms_info_mo_cnt', \
+                'sms_p2p_roam_int_mo_cnt', 'mms_p2p_mo_cnt', 'mms_p2p_inter_mo_cnt', \
+                'mms_p2p_inner_mo_cnt', 'mms_p2p_other_mo_cnt', 'mms_p2p_cm_mo_cnt', \
+                'mms_p2p_ct_mo_cnt', 'mms_p2p_roam_int_mo_cnt', 'all_call_cnt', 'voice_cnt', \
+                'local_base_call_cnt', 'ld_call_cnt', 'roam_call_cnt', 'caller_cnt', 'voice_dur', \
+                'caller_dur', 'localbase_inner_call_dur', 'free_call_dur', 'call_10010_cnt', \
+                'call_10010_manual_cnt', 'sms_bill_cnt', 'sms_p2p_mt_cnt', 'mms_cnt', \
+                'mms_p2p_mt_cnt', 'gprs_all_flux', 'gender', 'age', 'credit_value', \
+                'innet_dura', 'total_charge', 'gprs_flux', 'gprs_charge', 'local_call_minutes', \
+                'toll_call_minutes', 'roam_call_minutes', 'voice_call_minutes', 'p2p_sms_mo_cnt', \
+                'p2p_sms_mo_charge', 'pspt_type', 'is_shanghai', 'town_id', 'sale_id', 'pagerank', \
+                'product_id', 'product_price', 'product_knd', 'gift_voice_call_dur', \
+                'gift_sms_mo_cnt', 'gift_flux_value', 'distinct_serve_count', 'serve_sms_count', \
+                'lp', 'balance', 'balance_diff']
+        
+            video attributes = 
+                ['begin_time', 'begin_time_msel', 'imsi', 'server_ip', \
+                 'server_port', 'apn', 'prot_category', 'prot_type', \
+                 'lac', 'sac', 'ci', 'imei', 'rat', 'host', 'streaming_url', \
+                 'streaming_filesize', 'streaming_dw_packets', 'streaming_download_delay', \
+                 'associated_id', 'l4_ul_throughput', 'l4_dw_throughput', 'intbuffer_full_flag', \
+                 'tcp_rtt', 'get_streaming_delay', 'intbuffer_full_delay', 'sid', 'date_partition']
+    '''
+    
+    
+    #===========================================================================
+    # load data set (no index is used!)
+    #===========================================================================
+    dfData_user = pd.read_csv(strUserFilePath, header=0, sep='\t')
+    dfData_video = pd.read_csv(strVideoFilePath, header=0, sep='\t')
+    
+    #===========================================================================
+    # add columns
+    #===========================================================================
+    # add RATIO column
+    dfData_video['ratio'] = dfData_video['streaming_dw_packets']*1.0/dfData_video['streaming_filesize']
+    
+    # add LOCATION column
+    dfData_video['location'] = dfData_video['lac'].apply(str) + '-' \
+                                + dfData_video['sac'].apply(str)\
+                                + '-' + dfData_video['ci'].apply(str)
+    
+    # add DW_SPEED column
+    dfData_video['streaming_download_delay'].replace(0, 1, inplace=True)
+    dfData_video['streaming_download_speed'] = \
+        dfData_video['streaming_dw_packets']*1.0/dfData_video['streaming_download_delay']
+        
+    #===========================================================================
+    # setup transform rules
+    #===========================================================================
+    #----user features----
+    strIDColumnName_user = "msisdn"
+    lsColumns2Delete_user = ['free_call_dur','roam_call_minutes']
+    dcColumns2Discretize_user = {'localbase_outer_call_dur': None, \
+                                 'ld_call_dur':None, \
+                                 'roam_call_dur':None, \
+                                 'localbase_called_dur':None, \
+                                 'ld_called_dur':None, \
+                                 'roam_called_dur':None, \
+                                 'cm_dur':None, \
+                                 'ct_dur':None, \
+                                 'busy_call_dur':None, \
+                                 'fest_call_dur':None, \
+                                 'sms_p2p_mo_cnt':None, \
+                                 'sms_p2p_inter_mo_cnt':None, \
+                                 'sms_p2p_inner_mo_cnt':None, \
+                                 'sms_p2p_other_mo_cnt':None, \
+                                 'sms_p2p_cm_mo_cnt':None, \
+                                 'sms_p2p_ct_mo_cnt':None, \
+                                 'sms_info_mo_cnt':None, \
+                                 'sms_p2p_roam_int_mo_cnt':None, \
+                                 'mms_p2p_mo_cnt':None, \
+                                 'mms_p2p_inter_mo_cnt':None, \
+                                 'mms_p2p_inner_mo_cnt':None, \
+                                 'mms_p2p_other_mo_cnt':None, \
+                                 'mms_p2p_cm_mo_cnt':None, \
+                                 'mms_p2p_ct_mo_cnt':None, \
+                                 'mms_p2p_roam_int_mo_cnt':None, \
+                                 'all_call_cnt':None, \
+                                 'voice_cnt':None, \
+                                 'local_base_call_cnt':None, \
+                                 'ld_call_cnt':None, \
+                                 'roam_call_cnt':None, \
+                                 'caller_cnt':None, \
+                                 'voice_dur':None, \
+                                 'caller_dur':None, \
+                                 'localbase_inner_call_dur':None, \
+                                 'call_10010_cnt':None, \
+                                 'call_10010_manual_cnt':None, \
+                                 'sms_bill_cnt':None, \
+                                 'sms_p2p_mt_cnt':None, \
+                                 'mms_cnt':None, \
+                                 'mms_p2p_mt_cnt':None, \
+                                 'gprs_all_flux':None, \
+                                 'age':None, \
+                                 'credit_value':None ,\
+                                 'innet_dura':None, \
+                                 'total_charge':None, \
+                                 'gprs_flux':None, \
+                                 'gprs_charge':None, \
+                                 'local_call_minutes':None, \
+                                 'toll_call_minutes':None, \
+                                 'voice_call_minutes':None, \
+                                 'p2p_sms_mo_cnt':None, \
+                                 'p2p_sms_mo_charge':None, \
+                                 'pspt_type':None, \
+                                 'is_shanghai':None, \
+                                 'town_id':None, \
+                                 'sale_id':None, \
+                                 'pagerank':None, \
+                                 'product_id':None, \
+                                 'product_price':None, \
+                                 'product_knd':None, \
+                                 'gift_voice_call_dur':None, \
+                                 'gift_sms_mo_cnt':None, \
+                                 'gift_flux_value':None, \
+                                 'distinct_serve_count':None, \
+                                 'serve_sms_count':None, \
+                                 'lp':None, \
+                                 'balance':None, \
+                                 'balance_diff':None}
+
+    lsColumns2Vectorize_user = ['town_id', 'sale_id', 'product_id']
+    
+    
+    
+    #----video----
+    strIDColumnName_video = "streaming_url"
+    
+    lsColumns2Delete_video = ['begin_time_msel', 'imsi', 'server_ip', 'server_port', 'imei',\
+                              'streaming_dw_packets', 'associated_id', 'sid',\
+                              'lac', 'sac', 'ci', 'intbuffer_full_delay']
+    
+    dcColumns2Discretize_video = {'begin_time': [7*3600,9*3600,12*3600,14*3600,18*3600,20*3600], \
+                                 'streaming_filesize': [10.0, 50.0, 100.0, 200.0, 300.0, 400.0], \
+                                 'streaming_download_speed': [50.0, 100,0, 150.0, 200.0, 250.0, 300.0], \
+                                 'l4_ul_throughput':[1000.0, 2000.0, 4000.0], \
+                                 'l4_dw_throughput':[500.0, 1000.0, 2000.0, 3000.0], \
+                                 'tcp_rtt': [500, 1000, 1500, 2000, 2500, 3000], \
+                                 'get_streaming_delay':[200.0, 400.0, 600.0]}
+    
+    lsColumns2Vectorize_video = ['prot_category', 'prot_type', 'apn', \
+                                 'date_partition']
+    
+    #----ratio matrix----
+    strLabelColumnName = "ratio"
+    
+        
+    #===========================================================================
+    # transform
+    #===========================================================================
+    R, D, S = transform2mt(dfData_user, strIDColumnName_user, \
+                           lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
+                           dfData_video, strIDColumnName_video, \
+                           lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
+                           strLabelColumnName)
+    
+    return R, D, S
+
+def transform2mt(dfData_user, strIDColumnName_user, \
+                 lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
+                 dfData_video, strIDColumnName_video, \
+                 lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
+                 strLabelColumnName):
+    '''
+        Given two dataframes which contains user feature and video attribute data,
+        this function transform them to R, D, S matrices.
+        Namely, this function does the following works:
+        0. filter out invalid tuples;
+        1. delete useless columns;
+        2. discretize continuous data;
+        3. use OneHotEncoder to map categorical data;
+        4. transform into R, D, S;
+        
+        param:
+                as their name described.
+                
+        returns:
+                R, D, S - matrices which use NAN to represent missing values
+    '''
+    
+    #===========================================================================
+    # filter out invalid tuples
+    #===========================================================================
+    print("start to filter out invalid tuples...")
+    lsMasks_user = (~dfData_user[strIDColumnName_user].isnull() )
+    lsMasks_video = (~dfData_video[strIDColumnName_user].isnull() ) \
+                     & (~dfData_video['streaming_dw_packets'].isnull() ) \
+                     & (~dfData_video['streaming_filesize'].isnull() ) \
+                     & (dfData_video['streaming_dw_packets']<=dfData_video['streaming_filesize'])
+                     
+    dfData_user = dfData_user[lsMasks_user]
+    dfData_video = dfData_video[lsMasks_video]
+    
+    print("-->valid data size: %d users, %d records" % (len(dfData_user), len(dfData_video) ) )
+    
+    #===========================================================================
+    # find common users
+    #===========================================================================
+    print("start to find common users...")
+    # change both of them into string, in case of the wrong type cast of pandas
+    dfData_user[strIDColumnName_user] = dfData_user[strIDColumnName_user].astype(str).str[:11]
+    dfData_video[strIDColumnName_user] = dfData_video[strIDColumnName_user].astype(str).str[:11]
+
+    lsCommonUsers = list(\
+                         set(dfData_user[strIDColumnName_user].tolist())    \
+                         & set(dfData_video[strIDColumnName_user].tolist()) \
+                         )
+    print("-->%d users co-exist in both user and video data set." % len(lsCommonUsers) )
+    dfData_user = dfData_user[dfData_user[strIDColumnName_user].isin(lsCommonUsers)]
+    dfData_video = dfData_video[dfData_video[strIDColumnName_user].isin(lsCommonUsers)]
+    
+    #===========================================================================
+    # delete useless columns
+    #===========================================================================
+    print("start to delete useless columns...")
+    #----user----
+    for strColName in lsColumns2Delete_user:
+        del dfData_user[strColName]
+        
+    #----video----
+    for strColName in lsColumns2Delete_video:
+        del dfData_video[strColName]
+    
+    #===========================================================================
+    # discretize continuous data
+    #===========================================================================
+    print("start to discretize continuous data...")
+    #----user----
+    for (strColName,lsBins) in dcColumns2Discretize_user.iteritems():
+        sCol = dfData_user[strColName]
+
+        arrCuts = discretizeColumnEx(sCol, lsBins, None)
+        if arrCuts is not None:
+            dfData_user[strColName] = arrCuts # replace, no need to delete original one
+        else:
+            print ("discretize user column:%s failed." % strColName)
+            
+    #----video----
+    for (strColName,lsBins) in dcColumns2Discretize_video.iteritems():
+        sCol = dfData_video[strColName]
+
+        arrCuts = discretizeColumnEx(sCol, lsBins, None)
+        if arrCuts is not None:
+            dfData_video[strColName] = arrCuts
+        else:
+            print ("discretize video column:%s failed." % strColName)
+        
+    
+    #===========================================================================
+    # mapping categorical data
+    #===========================================================================
+    print("start to mapping categorical data...")
+    
+    #----user----
+    for strColName in lsColumns2Vectorize_user:
+        sCol = dfData_user[strColName]
+        print("mapping %s, unique value:%d..." % (strColName, len(sCol.unique() ) ) )
+        # digitalize categorical data
+        arrDigits, dcMappingTable = digitalizeColumnEx(sCol)
+        g_dcDigitMappingTable[sCol.name] = dcMappingTable
+        
+        # vectorize
+        enc = prepro.OneHotEncoder()
+        mtEncoded = enc.fit_transform(pd.DataFrame(arrDigits) ).toarray()
+        
+        # add mapped columns
+        for ci in xrange(mtEncoded.shape[1]):
+            strName = "%s_%d" % (strColName, ci)
+            dfData_user[strName] = mtEncoded[:,ci]
+        
+        # delete original column
+        del dfData_user[strColName]
+        
+    #----video----    
+    for strColName in lsColumns2Vectorize_video:
+        sCol = dfData_video[strColName]
+        print("mapping %s, unique value:%d..." % (strColName, len(sCol.unique() ) ) )
+        # digitalize categorical data
+        arrDigits, dcMappingTable = digitalizeColumnEx(sCol)
+        g_dcDigitMappingTable[sCol.name] = dcMappingTable
+        
+        # vectorize
+        enc = prepro.OneHotEncoder()
+        mtEncoded = enc.fit_transform(pd.DataFrame(arrDigits) ).toarray()
+        
+        # add mapped columns
+        for ci in xrange(mtEncoded.shape[1]):
+            strName = "%s_%d" % (strColName, ci)
+            dfData_video[strName] = mtEncoded[:,ci]
+        
+        # delete original column
+        del dfData_video[strColName]
+        
+    # TODO: find way to mapping it back!
+    
+    #===========================================================================
+    # transfrom into D
+    #===========================================================================
+    print("start to transfrom into D...")
+    dfD = dfData_user.drop_duplicates(strIDColumnName_user)
+    
+    # remember order of D, in order to sort R correspondingly
+    lsUserOrder = dfD[strIDColumnName_user].tolist()
+    
+    del dfD[strIDColumnName_user] # do not include uid in D matrix
+    
+    #===========================================================================
+    # transform into S
+    #===========================================================================
+    print("start to transform into S...")
+    dcS ={}
+    dcVideos2UserLabels = {} # to remember labels attached to each video 
+    nCount = 0
+    for ind, sRow in dfData_video.iterrows():
+        if (nCount % 500 == 0):
+            print("-->%.2f%%" % (nCount*100.0/len(dfData_video)) )
+            
+        sVideoRecord = sRow.drop([strIDColumnName_video,]) 
+        strKey = sVideoRecord.to_string()    # only use video qualities as key
+        uid = sVideoRecord[strIDColumnName_user]      # user of current row
+        dLabel = sVideoRecord[strLabelColumnName]    # label of current row
+        
+        # update dfS
+        dcS[strKey] = sVideoRecord
+        
+        # prepare for R
+        dcUsers2Labes = dcVideos2UserLabels.get(strKey)
+        if dcUsers2Labes is None: # if already exist, then add
+            dcUsers2Labes = {}
+            dcVideos2UserLabels[strKey] = dcUsers2Labes
+        
+        # FIXME: what if the same user has watched two videos(same video twice or two videos of same quality)
+        dcUsers2Labes[uid] = dLabel 
+        nCount += 1
+    
+    dfS = pd.DataFrame(dcS).T.convert_objects(convert_numeric = True)
+    del dfS[strIDColumnName_user] # do not include uid in D matrix
+    lsVideoOrder = dfS.index.tolist()
+    
+    #===========================================================================
+    # transform into R
+    #===========================================================================
+    print("start to transform into R...")
+    nCount = 0
+    dfR = pd.DataFrame(index=lsUserOrder) # construct an empty DataFrame
+    for strVideoKey,dcUsers2Labels in dcVideos2UserLabels.iteritems():
+        if (nCount % 100 == 0):
+            print("-->%.2f%%" % (nCount*100.0/len(dcVideos2UserLabels)) )
+        
+        sLabels = pd.Series(index=lsUserOrder)
+        for uid, dLabel in dcUsers2Labels.iteritems():
+            sLabels.loc[uid] = dLabel
+        
+        nCount += 1
+        
+        dfR[strVideoKey] = sLabels
+
+    #===========================================================================
+    # sort to ensure R, D, S are in the same order
+    #===========================================================================
+    dfR = dfR[lsVideoOrder]
+    
+    print("transformation is finished!")
+    
+    return dfR.as_matrix(), dfD.as_matrix(), dfS.as_matrix()
 
 
 if __name__ == '__main__':

@@ -5,7 +5,7 @@ Brief Description:
 @author: jason
 '''
 
-import common_function
+from tools import common_function
 
 g_dcUserVideos = {}
 g_lsValidRecords = []
@@ -32,7 +32,7 @@ def transform(strLine):
     
     # change SERVER_IP to integer
     if (len(lsItems[4]) > 0):
-        lsItems[4] = str(common_function.ip2int(lsItems[4]))
+        lsItems[4] = str(tools.common_function.ip2int(lsItems[4]))
     
     # change LAC to integer
     if (len(lsItems[9]) > 0):
@@ -121,7 +121,7 @@ def updateUserRecords(strLine, g_dcUserVideos):
 def execute(strXDRPath, strTopUserRecordsPath, strValidRecordPath, nTop=10):
     
     # get xdr list
-    lsXDRFiles = common_function.getFileList(strXDRPath, 'dat')
+    lsXDRFiles = tools.common_function.getFileList(strXDRPath, 'dat')
     
     # open file to save all valid records
     with open(strValidRecordPath, 'w') as hValidFile:
