@@ -8,6 +8,7 @@ Brief Description:
 import pandas as pd
 import numpy as np
 import sklearn.preprocessing as prepro
+import gc
 
 g_dcColumns2Discritize = {'BEGIN_TIME': [7*3600,9*3600,12*3600,14*3600,18*3600,20*3600], \
                           'STREAMING_FILESIZE': [10.0, 50.0, 100.0, 200.0, 300.0, 400.0],\
@@ -26,7 +27,7 @@ def discretizeColumnEx(srColumn, lsBins, func=None):
     strName = srColumn.name
     if lsBins is None: # cut according to its distribution
         sStat = srColumn.describe()
-        lsBins = [sStat['25%'], sStat['mean'], sStat['75%'] ]
+        lsBins = [sStat['25%'], sStat['50%'], sStat['75%'] ]
     else:
         if func is not None:
             srColumn = srColumn.apply(func)
@@ -621,7 +622,7 @@ def transformSHData(strUserFilePath, strVideoFilePath):
     
     lsColumns2Delete_video = ['begin_time_msel', 'imsi', 'server_ip', 'server_port', 'imei',\
                               'streaming_dw_packets', 'associated_id', 'sid',\
-                              'lac', 'sac', 'ci', 'intbuffer_full_delay']
+                              'lac', 'sac', 'ci', 'intbuffer_full_delay', 'location', 'host', 'streaming_download_delay']
     
     dcColumns2Discretize_video = {'begin_time': [7*3600,9*3600,12*3600,14*3600,18*3600,20*3600], \
                                  'streaming_filesize': [10.0, 50.0, 100.0, 200.0, 300.0, 400.0], \
@@ -641,13 +642,12 @@ def transformSHData(strUserFilePath, strVideoFilePath):
     #===========================================================================
     # transform
     #===========================================================================
-    R, D, S = transform2mt(dfData_user, strIDColumnName_user, \
+    return transform2mt(dfData_user, strIDColumnName_user, \
                            lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                            dfData_video, strIDColumnName_video, \
                            lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
                            strLabelColumnName)
     
-    return R, D, S
 
 def transform2mt(dfData_user, strIDColumnName_user, \
                  lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
@@ -668,7 +668,8 @@ def transform2mt(dfData_user, strIDColumnName_user, \
                 as their name described.
                 
         returns:
-                R, D, S - matrices which use NAN to represent missing values
+                R    - matrix which use np.uint8(255) to represent missing values
+                D, S - matrices which use NAN to represent missing values
     '''
     
     #===========================================================================
@@ -713,6 +714,11 @@ def transform2mt(dfData_user, strIDColumnName_user, \
     #----video----
     for strColName in lsColumns2Delete_video:
         del dfData_video[strColName]
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
     
     #===========================================================================
     # discretize continuous data
@@ -787,75 +793,141 @@ def transform2mt(dfData_user, strIDColumnName_user, \
     # TODO: find way to mapping it back!
     
     #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
+    
+    #===========================================================================
     # transfrom into D
     #===========================================================================
     print("start to transfrom into D...")
     dfD = dfData_user.drop_duplicates(strIDColumnName_user)
     
-    # remember order of D, in order to sort R correspondingly
     lsUserOrder = dfD[strIDColumnName_user].tolist()
-    
-    del dfD[strIDColumnName_user] # do not include uid in D matrix
     
     #===========================================================================
     # transform into S
     #===========================================================================
     print("start to transform into S...")
     dcS ={}
-    dcVideos2UserLabels = {} # to remember labels attached to each video 
+    dcUsers2VideoLabels = {} # to remember labels attached to each video 
     nCount = 0
     for ind, sRow in dfData_video.iterrows():
-        if (nCount % 500 == 0):
+        if (nCount % 1000 == 0):
             print("-->%.2f%%" % (nCount*100.0/len(dfData_video)) )
             
-        sVideoRecord = sRow.drop([strIDColumnName_video,]) 
-        strKey = sVideoRecord.to_string()    # only use video qualities as key
-        uid = sVideoRecord[strIDColumnName_user]      # user of current row
-        dLabel = sVideoRecord[strLabelColumnName]    # label of current row
+        sVideoRecord = sRow.drop([strIDColumnName_video, strIDColumnName_user, strLabelColumnName]) 
+        strVid = ''.join([str(i)+',' for i in sVideoRecord.values])    # only use video qualities as key
+        strUid = sRow[strIDColumnName_user]      # user of current row
+        dLabel = sRow[strLabelColumnName]    # label of current row
         
         # update dfS
-        dcS[strKey] = sVideoRecord
+        dcS[strVid] = sVideoRecord
         
-        # prepare for R
-        dcUsers2Labes = dcVideos2UserLabels.get(strKey)
-        if dcUsers2Labes is None: # if already exist, then add
-            dcUsers2Labes = {}
-            dcVideos2UserLabels[strKey] = dcUsers2Labes
+        # prepare for R (row: vid, column:uid)
+        dcVideos2Labels = dcUsers2VideoLabels.get(strUid)
+        if dcVideos2Labels is None: # if already exist, then add
+            dcVideos2Labels = {}
+            dcUsers2VideoLabels[strUid] = dcVideos2Labels
         
         # FIXME: what if the same user has watched two videos(same video twice or two videos of same quality)
-        dcUsers2Labes[uid] = dLabel 
+        dcVideos2Labels[strVid] = np.uint8(dLabel*100.0)
         nCount += 1
     
     dfS = pd.DataFrame(dcS).T.convert_objects(convert_numeric = True)
-    del dfS[strIDColumnName_user] # do not include uid in D matrix
-    lsVideoOrder = dfS.index.tolist()
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
     
     #===========================================================================
     # transform into R
     #===========================================================================
     print("start to transform into R...")
+    lsFrames = []
+    nStart = 0
+    nSliceSize = 5000
+    nEnd = nStart + nSliceSize
+    
+    lsUsers2VideoLabels = dcUsers2VideoLabels.items()
+    nTotalSize = len(lsUsers2VideoLabels)
+    
+    while (nStart < nTotalSize ):
+        dc = {k:v for (k,v) in lsUsers2VideoLabels[nStart:nEnd]}
+        df = pd.DataFrame(dc, columns=lsUserOrder).fillna(np.uint8(255)).astype(np.uint8)
+        lsFrames.append(df)
+
+        nStart = nEnd
+        nEnd = nStart + nSliceSize
+        if (nEnd > nTotalSize):
+            nEnd = nTotalSize
+            
+        print('-->R: %.2f%%' % (nEnd*100.0/nTotalSize) )
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
+    
+    #===========================================================================
+    # aggregate to R
+    #===========================================================================
+    print('start to aggregate R...')
+    # remember order
+    lsVideoOrder_R = []
+    for f in lsFrames:
+        lsVideoOrder_R += f.index.tolist()
+    
+    # aggregate
+    dfR = pd.concat(lsFrames, ignore_index=True)
+    
+    lsUserOrder_R = dfR.columns
+    
+    dfR = dfR.T # change to user-video matrix
+    
+    #===========================================================================
+    # sort w.r.t R
+    #===========================================================================
+    print('start to sort w.r.t R...')
+    dfD = dfD.set_index(strIDColumnName_user)
+    dfD = dfD.reindex(lsUserOrder_R)
+    
+    dfS = dfS.reindex(lsVideoOrder_R)
+    
+    print("Congratulations! transformation is finished.")
+    
+    return lsFrames, lsUserOrder_R, lsVideoOrder_R, dfR, dfD, dfS
+
+def AggregateR(lsFrames, lsUserOrder, lsVideoOrder):
+    #===========================================================================
+    # contact into dfR
+    #===========================================================================
+    print ('merging into R...')
+    
     nCount = 0
-    dfR = pd.DataFrame(index=lsUserOrder) # construct an empty DataFrame
-    for strVideoKey,dcUsers2Labels in dcVideos2UserLabels.iteritems():
-        if (nCount % 100 == 0):
-            print("-->%.2f%%" % (nCount*100.0/len(dcVideos2UserLabels)) )
-        
-        sLabels = pd.Series(index=lsUserOrder)
-        for uid, dLabel in dcUsers2Labels.iteritems():
-            sLabels.loc[uid] = dLabel
+    dfR = pd.DataFrame(index=lsUserOrder)
+    for f in lsFrames:
+        dfR = dfR.merge(f, left_index=True, right_index=True, how='outer', copy=False)
         
         nCount += 1
+        print("-->%.2f%%" % (nCount*100.0/len(lsFrames)) )
         
-        dfR[strVideoKey] = sLabels
-
+        gc.collect()
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
+    
     #===========================================================================
     # sort to ensure R, D, S are in the same order
     #===========================================================================
     dfR = dfR[lsVideoOrder]
     
-    print("transformation is finished!")
+    print('Aggregation of R is finished, shape:%d, %d' % (dfR.shape[0], dfR.shape[1]) )
     
-    return dfR.as_matrix(), dfD.as_matrix(), dfS.as_matrix()
+    return dfR.as_matrix()
 
 
 if __name__ == '__main__':

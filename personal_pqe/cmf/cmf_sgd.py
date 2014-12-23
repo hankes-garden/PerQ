@@ -14,7 +14,6 @@ Brief Description:
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import sklearn.preprocessing as prepro
 
 g_dMinrmseR = 0.05
@@ -61,53 +60,58 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
             Q  - video quality in latent factor, h-by-f
         
         Note:
-            1. Nan stands for missing value in input matrices, but in the core hard
+            1. this function would change the content of input matrices;
+            2. 255 and Nan stand for missing value in input matrices, but in the core hard
                of CMF, we use zero to represent missing value;
     '''
+    print('start to initialize factor matrices...')
     #===========================================================================
     # init
     #===========================================================================
     gamma = dLearningRate
     
     # copy data to prevent modification on original data
-    R = np.copy(mtR)
-    D = np.copy(mtD)
-    S = np.copy(mtS)
+    R = mtR
+    D = mtD
+    S = mtS
     
     # D = U·P^T
-#     U = np.random.rand(D.shape[0], f)
-#     P = np.random.rand(D.shape[1], f)
-    U = np.zeros((D.shape[0], f) )
-    P = np.zeros((D.shape[1], f) )
+    U = np.random.rand(D.shape[0], f)
+    P = np.random.rand(D.shape[1], f)
+#     U = np.zeros((D.shape[0], f) )
+#     P = np.zeros((D.shape[1], f) )
     
     # S = V·Q^T
-#     V = np.random.rand(S.shape[0], f)
-#     Q = np.random.rand(S.shape[1], f)
-    V = np.zeros( (S.shape[0], f) )
-    Q = np.zeros( (S.shape[1], f) )
+    V = np.random.rand(S.shape[0], f)
+    Q = np.random.rand(S.shape[1], f)
+#     V = np.zeros( (S.shape[0], f) )
+#     Q = np.zeros( (S.shape[1], f) )
     
     # R = B_u + B_v + U·V^T
-#     bu = np.random.rand(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
-#     bv = np.random.rand(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
+    bu = np.random.rand(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
+    bv = np.random.rand(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
 
-    bu = np.zeros(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
-    bv = np.zeros(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
+#     bu = np.zeros(R.shape[0]) # B_u is m-by-n, with same values in a row, use array here for saving memory
+#     bv = np.zeros(R.shape[1]) # B_v is m-by-n, with identical values in a column, use array here for saving memory
 
+    print('start to construct weight matrices...')
     # weight matrix for sparse matrices, need to be done before filling nan
-    weightR = np.where(np.isnan(R), 0.0, 1.0)
+    weightR = np.where(R==255, 0.0, 1.0)
     weightD = np.where(np.isnan(D), 0.0, 1.0)
     weightS = np.where(np.isnan(S), 0.0, 1.0)
     
     # fill nan with zeros
-    R[np.isnan(R)] = 0.0
+    R[R==255] = 0
     D[np.isnan(D)] = 0.0
     S[np.isnan(S)] = 0.0
     
     #===========================================================================
     # select 30% for test
     #===========================================================================
+    print('start to sample test data set...')
     arrNonzeroRows, arrNonzeroCols = np.nonzero(R)
-    ix = np.random.choice(len(arrNonzeroRows), size=int(np.floor(len(arrNonzeroRows)*dTestRatio)), replace=False)
+    ix = np.random.choice(len(arrNonzeroRows), \
+                          size=int(np.floor(len(arrNonzeroRows)*dTestRatio)), replace=False)
     
     # don't use these test elements to train
     weightR[arrNonzeroRows[ix], arrNonzeroCols[ix]] = 0.0
@@ -118,7 +122,7 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
     
     
     # mu has to be calculated after masking test data
-    mu = (R.sum()*1.0)/(weightR<>0).sum()
+    mu = ( (R*weightR).sum()*1.0)/(weightR<>0).sum()
     
     #===========================================================================
     # trainning
@@ -126,32 +130,56 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
     print("==Training===========================================")
     
     # normalize (R does not need to normalize)
-    normD = prepro.normalize(D, axis=1)
-    normS = prepro.normalize(S, axis=1)
+    normD = prepro.normalize(D, axis=1)*100
+    normS = prepro.normalize(S, axis=1)*100
     
     nUsers = R.shape[0]
     nVideos = R.shape[1]
+    
+    #===========================================================================
+    # compute initial error
+    #===========================================================================
+    # compute error in R
+    predR =  (np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) ) + mu # use broadcast to add on each row/column
+    _errorR = np.subtract(R, predR)
+    errorR = np.multiply(weightR, _errorR)
+    
+    # compute error in normD
+    predD = np.dot(U, P.T)
+    _errorD = np.subtract(normD, predD)
+    errorD = np.multiply(weightD, _errorD)
+    
+    
+    # compute error in normS
+    predS = np.dot(V, Q.T)
+    _errorS = np.subtract(normS, predS)
+    errorS = np.multiply(weightS, _errorS)
+    
+    rmseR = np.sqrt( np.power(errorR, 2.0).sum() / (weightR<>0).sum() )
+    rmseD = np.sqrt( np.power(errorD, 2.0).sum() / (weightD<>0).sum() )
+    rmseS = np.sqrt( np.power(errorS, 2.0).sum() / (weightS<>0).sum() )
+    
+    #=======================================================================
+    # output
+    print("initial step, r=%f" % (gamma) )
+    print("    RMSE(R) = %f" % rmseR )
+    print("    RMSE(normD) = %f" % rmseD )
+    print("    RMSE(normS) = %f" % rmseS )
+    print("------------------------------")
+    #=======================================================================
+    
+    # save RMSE
+    dcRMSE = {}
+    dcRMSE['rmseR'] = rmseR
+    dcRMSE['rmseD'] = rmseD
+    dcRMSE['rmseS'] = rmseS
+    if (lsTrainingRMSE is not None):
+        lsTrainingRMSE.append(dcRMSE)
+    
     for step in xrange(0, nMaxStep):
         
         # get learning rate
         gamma = getLearningRate(gamma, step)
-        
-        # compute error in R
-        predR =  (np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) ) + mu # use broadcast to add on each row/column
-        _errorR = np.subtract(R, predR)
-        errorR = np.multiply(weightR, _errorR)
-        
-        # compute error in normD
-        predD = np.dot(U, P.T)
-        _errorD = np.subtract(normD, predD)
-        errorD = np.multiply(weightD, _errorD)
-        
-        
-        # compute error in normS
-        predS = np.dot(V, Q.T)
-        _errorS = np.subtract(normS, predS)
-        errorS = np.multiply(weightS, _errorS)
-        
         
         #=======================================================================
         # update
@@ -192,8 +220,23 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
             Q = oldQ + gamma*arrAlphas[2]*(np.dot(errorS[[i],:].T, oldV[[i],:])-arrLambdas[2]*oldQ)
         
         #=======================================================================
-        # check convergence
+        # update error
         #=======================================================================
+        # compute error in R
+        predR =  (np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) ) + mu # use broadcast to add on each row/column
+        _errorR = np.subtract(R, predR)
+        errorR = np.multiply(weightR, _errorR)
+        
+        # compute error in normD
+        predD = np.dot(U, P.T)
+        _errorD = np.subtract(normD, predD)
+        errorD = np.multiply(weightD, _errorD)
+        
+        # compute error in normS
+        predS = np.dot(V, Q.T)
+        _errorS = np.subtract(normS, predS)
+        errorS = np.multiply(weightS, _errorS)
+        
         rmseR = np.sqrt( np.power(errorR, 2.0).sum() / (weightR<>0).sum() )
         rmseD = np.sqrt( np.power(errorD, 2.0).sum() / (weightD<>0).sum() )
         rmseS = np.sqrt( np.power(errorS, 2.0).sum() / (weightS<>0).sum() )
@@ -204,20 +247,24 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
         dcRMSE['rmseS'] = rmseS
         if (lsTrainingRMSE is not None):
             lsTrainingRMSE.append(dcRMSE)
+            
+        #=======================================================================
+        # debug
+        print("step#: %d   r=%f" % (step, gamma) )
+        print("    RMSE(R) = %f" % rmseR )
+        print("    RMSE(normD) = %f" % rmseD )
+        print("    RMSE(normS) = %f" % rmseS )
+        print("------------------------------")
+        #=======================================================================
         
+        
+        #=======================================================================
+        # check convergence
+        #=======================================================================
         if(rmseR <= g_dMinrmseR):
             print("converged!! rmseR=%.4f" % rmseR)
             break
         
-        #=======================================================================
-        # debug
-        print("step#: %d   r=%.4f" % (step, gamma) )
-        print("    RMSE(R) = %.4f" % rmseR )
-        print("    RMSE(normD) = %.4f" % rmseD )
-        print("    RMSE(normS) = %.4f" % rmseS )
-        print("------------------------------")
-        #=======================================================================
-    
     #===========================================================================
     # test
     #===========================================================================
@@ -243,7 +290,6 @@ def visualizeRMSETrend(lsRMSE):
     lsSamples.append(999)
     ax = df.iloc[lsSamples].plot(yticks=np.arange(0, 1, 0.05), ylim=(0.0,1.0), style=['--','-.', '-' ])
     ax.set_ylabel('RMSE')
-    plt.show()
     
 
 def testCMF():
