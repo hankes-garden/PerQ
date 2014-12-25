@@ -107,6 +107,39 @@ def invetigateLambda(strInPath, nMaxStep):
     
     return dcResult
 
+def testCMF():
+    # setup
+    arrAlphas = np.array([0.4, 0.3, 0.3])
+    arrLambdas = np.array([0.2, 0.2, 0.2])
+    f = 20
+    dLearningRate = 0.01
+    nMaxStep = 200
+    
+    
+    # 10-fold cross validation
+    dMinRmseR = 1.0
+    lsBestTrainingRMSEs = None
+    for i in xrange(1):
+        
+        # load data
+        R = np.load('d:\\playground\\R_lite.npy')
+        D = np.load('d:\\playground\\D_lite.npy')
+        S = np.load('d:\\playground\\S_lite.npy')
+        
+        lsTrainingRMSE = []
+
+        mu, bu, bv, U, P, V, Q, rmseR_test  = cmf.fit(R, D, S, arrAlphas, arrLambdas, f,\
+                               dLearningRate, nMaxStep, lsTrainingRMSE, dTestRatio=0.2, bDebugInfo=True)
+        
+        if (rmseR_test < dMinRmseR):
+            dMinRmseR = rmseR_test
+            lsBestTrainingRMSEs = lsTrainingRMSE
+    
+    print('====testCMF finished====\n-->best training rmse:%f, test rmse:%f' % (lsTrainingRMSE[-1]['rmseR'], dMinRmseR) ) 
+    cmf.visualizeRMSETrend(lsBestTrainingRMSEs)
+        
+if __name__ == '__main__':
+    testCMF()
 
 
 
