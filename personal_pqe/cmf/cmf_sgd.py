@@ -15,6 +15,7 @@ Brief Description:
 import numpy as np
 import pandas as pd
 import sklearn.preprocessing as prepro
+import gc
 
 g_dMinrmseR = 0.1
 g_gamma0 = 0.01
@@ -126,7 +127,8 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
     mu = ( (R*weightR).sum()*1.0)/(weightR<>0).sum()
     
     # scaling features to [0,1]
-    min_max_scaler = prepro.MinMaxScaler()
+    print ('start to scale features...')
+    min_max_scaler = prepro.MinMaxScaler(copy=False)
     normD = min_max_scaler.fit_transform(D)
     normS = min_max_scaler.fit_transform(S)
     
@@ -182,11 +184,14 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
         #=======================================================================
         # update
         #=======================================================================
+        
         # bu
+        print('start to update bu...')
         for j in xrange(errorR.shape[1]):
             bu = bu + gamma* (arrAlphas[0]*errorR[:,j] - arrLambdas[0]*bu)
          
         # bv
+        print('start to update bv...')
         for i in xrange(errorR.shape[0]):
             bv = bv + gamma*(arrAlphas[0]*errorR[i,:] - arrLambdas[0]*bv)
             
@@ -196,28 +201,37 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
         oldQ = np.copy(Q)
         
         # U
+        print('start to update U...')
         for j in xrange(errorR.shape[1]):
             U = oldU + gamma*( arrAlphas[0]* np.dot(errorR[:, [j] ], oldV[ [j], :])
                                        + arrAlphas[1]*np.dot(errorD, oldP)\
                                        - arrLambdas[0]*oldU )
+            if (j % 1000 == 0):
+                print('-->U: %.2f%%' % (j*100.0/errorR.shape[1]) )
         
         # P
+        print('start to update P...')
         for i in xrange(errorD.shape[0]):
             P = oldP + gamma* ( arrAlphas[1]* np.dot(errorD[[i],:].T, oldU[[i],:]) - arrLambdas[1]*oldP)
         
         # V
+        print('start to update V...')
         for i in xrange(errorR.shape[0]):
             V = oldV + gamma*( arrAlphas[0] * np.dot(errorR[[i], :].T, oldU[[i], :]) \
                                        + arrAlphas[2]* np.dot(errorS, oldQ) \
                                        - arrLambdas[0]*oldV )
+            if (i % 1000 == 0):
+                print('-->V: %.2f%%' % (i*100.0/errorR.shape[0]) )
         
         # Q
+        print('start to update Q...')
         for i in xrange(errorS.shape[0]):
             Q = oldQ + gamma* (arrAlphas[2]* np.dot(errorS[[i],:].T, oldV[[i],:]) - arrLambdas[2]*oldQ )
         
         #=======================================================================
         # update error
         #=======================================================================
+        print('start to compute error...')
         # compute error in R
         predR =  (np.dot(U, V.T) + bu.reshape(nUsers,1) + bv.reshape( (1, nVideos) ) ) + mu # use broadcast to add on each row/column
         _errorR = np.subtract(R, predR)
@@ -236,6 +250,7 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
         rmseR = np.sqrt( np.power(errorR, 2.0).sum() / (weightR<>0).sum() )
         rmseD = np.sqrt( np.power(errorD, 2.0).sum() / (weightD<>0).sum() )
         rmseS = np.sqrt( np.power(errorS, 2.0).sum() / (weightS<>0).sum() )
+        
         # save RMSE
         dcRMSE = {}
         dcRMSE['rmseR'] = rmseR
@@ -260,6 +275,12 @@ def fit(mtR, mtD, mtS, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsTrai
         if(rmseR <= g_dMinrmseR):
             print("converged!! rmseR=%.4f" % rmseR)
             break
+        
+        #=======================================================================
+        # time to clean memory
+        #=======================================================================
+        print('time to release memory...')
+        gc.collect()
         
     #===========================================================================
     # test

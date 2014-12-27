@@ -475,7 +475,7 @@ def transformNJData(strDataPath):
     return R, D, S
 
 
-def transformSHData(strUserFilePath, strVideoFilePath):
+def transformSHData(strUserFilePath, strVideoFilePath, lsUsers2Select=None):
     '''
         This function transform shanghai data set to R, S, D matrices.
         Namely, this function does the following tasks:
@@ -646,14 +646,15 @@ def transformSHData(strUserFilePath, strVideoFilePath):
                            lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                            dfData_video, strIDColumnName_video, \
                            lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                           strLabelColumnName)
+                           strLabelColumnName, lsUsers2Select)
     
 
 def transform2mt(dfData_user, strIDColumnName_user, \
                  lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                  dfData_video, strIDColumnName_video, \
                  lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                 strLabelColumnName):
+                 strLabelColumnName, 
+                 lsUsers2Select):
     '''
         Given two dataframes which contains user feature and video attribute data,
         this function transform them to R, D, S matrices.
@@ -699,6 +700,11 @@ def transform2mt(dfData_user, strIDColumnName_user, \
                          set(dfData_user[strIDColumnName_user].tolist())    \
                          & set(dfData_video[strIDColumnName_user].tolist()) \
                          )
+    
+    if (lsUsers2Select is not None):
+        print('start to select top %d users from common users...' % len(lsUsers2Select) )
+        lsCommonUsers = list( set(lsCommonUsers) & set(lsUsers2Select) )
+        
     print("-->%d users co-exist in both user and video data set." % len(lsCommonUsers) )
     dfData_user = dfData_user[dfData_user[strIDColumnName_user].isin(lsCommonUsers)]
     dfData_video = dfData_video[dfData_video[strIDColumnName_user].isin(lsCommonUsers)]
@@ -885,6 +891,7 @@ def transform2mt(dfData_user, strIDColumnName_user, \
     lsUserOrder_R = dfR.columns
     
     dfR = dfR.T # change to user-video matrix
+    dfR.columns = lsVideoOrder_R # set vid to R
     
     #===========================================================================
     # sort w.r.t R
