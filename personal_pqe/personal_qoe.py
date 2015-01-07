@@ -8,6 +8,8 @@ Description:
 import numpy as np
 import cmf.cmf_sgd as cmf
 import data_processing.data2matrix as dm
+import pandas as pd
+import matplotlib.pyplot as plt
 
 def train(strDataPath):
     
@@ -35,11 +37,13 @@ def train(strDataPath):
     
     cmf.visualizeRMSETrend(lsRMSE)
     
-def multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio):
+def multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio):
     #===========================================================================
     # load data & transform into matrix
     #===========================================================================
-    R, D, S = dm.transformNJData(strInPath)
+    R = np.load(strRPath)
+    D = np.load(strDPath)
+    S = np.load(strSPath)
     
     dcResult = {}
     nTrials = len(lsParamSets)
@@ -66,35 +70,35 @@ def multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f
         print 'arrlambdas', arrLambdas
         print 'f', f
         print("---------------------------------------------------------------------")
-        bu, bv, U, P, V, Q, rmseR  = cmf.fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE, dTestRatio )
+        U, P, V, Q, mu, rmseR_test  = cmf.fit_test(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE, dTestRatio )
         
         if type(lsParamSets[i]) is np.ndarray:
-            dcResult[lsParamSets[i][0]] = (lsRMSE[-1], rmseR) # choose param for R as key
+            dcResult[lsParamSets[i][0]] = {'train':lsRMSE[-1]['rmseR'], 'test': rmseR_test} # choose param for R as key
         else:
-            dcResult[lsParamSets[i]] = (lsRMSE[-1], rmseR)
+            dcResult[lsParamSets[i]] = {'train':lsRMSE[-1]['rmseR'], 'test': rmseR_test}
         
     print("%d trials have been finished" % nTrials)
     
     return dcResult
 
-def invetigateLambda(strInPath, nMaxStep):
-    
+def findBestLambda(strRPath, strDPath, strSPath):
     #===========================================================================
     # initial params
     #===========================================================================
     arrAlphas = np.array([0.8,0.1,0.1]) 
     arrLambdas = np.array([0.4,0.3,0.3])
-    f = 5
-    dLearningRate = 0.01
-    dTestRatio = 0.2
+    f = 20
+    dLearningRate = 0.0001
+    dTestRatio = 0.3
+    nMaxStep = 400
     
     #===========================================================================
     # set different settings
     #===========================================================================
-    lsParamSets = [np.array([0.1, 0.3, 0.3]), \
-                   np.array([0.3, 0.3, 0.3]), \
-                   np.array([0.6, 0.3, 0.3]), \
-                   np.array([0.9, 0.3, 0.3]), \
+    lsParamSets = [np.array([0.3, 0.3, 0.3]), \
+                   np.array([0.6, 0.6, 0.6]), \
+                   np.array([1.2, 1.2, 1.2]), \
+                   np.array([2.4, 2.4, 2.4])
                    ]
     
     strParamName = 'lambda' 
@@ -103,7 +107,39 @@ def invetigateLambda(strInPath, nMaxStep):
     #===========================================================================
     # test different settings    
     #===========================================================================
-    dcResult = multipleTrial(strInPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio)
+    dcResult = multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio)
+    
+    return dcResult
+
+def findBestAlpha(strRPath, strDPath, strSPath):
+    #===========================================================================
+    # initial params
+    #===========================================================================
+    arrAlphas = np.array([0.8,0.1,0.1]) 
+    arrLambdas = np.array([0.4,0.3,0.3])
+    f = 20
+    dLearningRate = 0.0001
+    dTestRatio = 0.3
+    nMaxStep = 400
+    
+    #===========================================================================
+    # set different settings
+    #===========================================================================
+    lsParamSets = [np.array([0.33, 0.33, 0.33]), \
+                   np.array([0.5, 0.25, 0.25]), \
+                   np.array([0.6, 0.2, 0.2]), \
+                   np.array([0.8, 0.1, 0.1]), \
+                   np.array([1, 1, 1]), 
+                   np.array([2, 4, 4]), \
+                   ]
+    
+    strParamName = 'alpha' 
+
+
+    #===========================================================================
+    # test different settings    
+    #===========================================================================
+    dcResult = multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio)
     
     return dcResult
 
@@ -139,7 +175,12 @@ def testCMF():
     cmf.visualizeRMSETrend(lsBestTrainingRMSEs)
         
 if __name__ == '__main__':
-    testCMF()
+    dc = findBestLambda('d:\\playground\\sh_xdr\\R_top500.npy', \
+                  'd:\\playground\\sh_xdr\\D_top500.npy', 
+                  "d:\\playground\\sh_xdr\\S_top500.npy")
+    df = pd.DataFrame(dc)
+    df.T.plot()
+    plt.show()
 
 
 
