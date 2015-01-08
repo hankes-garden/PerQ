@@ -63,34 +63,34 @@ def preprocessDataSet(dfData, lsNumericColumns, lsCategoricalColumns, strLabelCo
     arrCateFeatures = vec.fit_transform(dfCateVariables.T.to_dict().values())
     
     # setup training set
-    arrX = np.concatenate((arrNumVariables, arrCateFeatures), axis=1)
+    mtX = np.concatenate((arrNumVariables, arrCateFeatures), axis=1)
     lsVariableNames = dfNumVariables.columns.tolist()
     lsVariableNames += vec.get_feature_names()
     
     arrY = dfData[strLabelColumn].values
     
-    return arrX, arrY, lsVariableNames
+    return mtX, arrY, lsVariableNames
 
-def trainModel(arrX, arrY, params):
+def trainModel(mtX, arrY, params):
     # setup regressor
     gbr = GradientBoostingRegressor(**params) 
     
     # fit
     print('start to train model ...') 
-    gbr.fit(arrX, arrY) 
+    gbr.fit(mtX, arrY) 
     print('finish training model.')
     
     return gbr
 
-def crossValidate(arrX, arrY, params, nFold):
+def crossValidate(mtX, arrY, params, nFold):
     # 10-fold cross validation
     dcModels = {}
-    kf = cross_validation.KFold(len(arrY), n_folds=10)
+    kf = cross_validation.KFold(len(arrY), nFoldCount=10)
     for arrTrainIndex, arrTestIndex in kf:
         # setup regressor
         model = GradientBoostingRegressor(**params)
         
-        arrXTrain, arrXTest = arrX[arrTrainIndex], arrX[arrTestIndex]
+        arrXTrain, arrXTest = mtX[arrTrainIndex], mtX[arrTestIndex]
         arrYTrain, arrYTest = arrY[arrTrainIndex], arrY[arrTestIndex]
         
         # train
@@ -120,10 +120,10 @@ def getVariableImportance(model, lsTrainingFeatureNames):
     
     return dcVariableImportance
 
-def predict(model, arrX, arrY):
+def predict(model, mtX, arrY):
     # test
-    mae_test = mean_absolute_error(arrY, model.predict(arrX)) 
-    mse_test = mean_squared_error(arrY, model.predict(arrX)) 
+    mae_test = mean_absolute_error(arrY, model.predict(mtX)) 
+    mse_test = mean_squared_error(arrY, model.predict(mtX)) 
     print("MAE: %.2f, MSE:%.2f. " % (mae_test, mse_test) )
     
 def drawVariableImportance(dfVariableImportance):
@@ -164,22 +164,22 @@ def validateOnSH(strInPath, strOutPath, bSerialize=False):
         strIMSI = xdr.split('/')[-1].split('.')[0]
         
         # prepare data set
-        arrX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfData, g_lsSelectedColumns, \
+        mtX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfData, g_lsSelectedColumns, \
                                                                                 g_lsNumericColumns, \
                                                                                 g_lsCategoricalColumns,\
                                                                                 'DOWNLOAD_RATIO')
         
 #         # train model
-#         model = trainModel(arrX, arrY, g_modelParams)
+#         model = trainModel(mtX, arrY, g_modelParams)
 #         dcVariableImportance[strIMSI] = getVariableImportance(model, lsTrainingFeatureNames)
 #          
 #         # test
-#         mse = mean_squared_error(arrY, model.predict(arrX) )
-#         mae = mean_absolute_error(arrY, model.predict(arrX) )
+#         mse = mean_squared_error(arrY, model.predict(mtX) )
+#         mae = mean_absolute_error(arrY, model.predict(mtX) )
 #         print("MSE: %.4f, MAE: %.4f" % (mse, mae) )
         
         # cross validation
-        dcPersonalModels = crossValidate(arrX, arrY, g_modelParams, 10)
+        dcPersonalModels = crossValidate(mtX, arrY, g_modelParams, 10)
         bestModel, fBestScore = max(dcPersonalModels.iteritems(), key=operator.itemgetter(1) )
         dcVariableImportance[strIMSI] = getVariableImportance(bestModel, lsTrainingFeatureNames)
         
@@ -278,21 +278,21 @@ def validateOnNJ(strInPath, strOutPath, bSerialize=False):
         del dfUserRecord[strVideoIDColumnName]
                 
         # prepare data set
-        arrX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfUserRecord, dcColumns2Discretize.keys(), \
+        mtX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfUserRecord, dcColumns2Discretize.keys(), \
                                                                lsColumns2Vectorize, strLabelColumnName)
         
         # train model
-        model = trainModel(arrX, arrY, g_modelParams)
+        model = trainModel(mtX, arrY, g_modelParams)
         dcVariableImportance["user %d" % uNum] = getVariableImportance(model, lsTrainingFeatureNames)
            
         # test
-        mse = mean_squared_error(arrY, model.predict(arrX) )
-        mae = mean_absolute_error(arrY, model.predict(arrX) )
+        mse = mean_squared_error(arrY, model.predict(mtX) )
+        mae = mean_absolute_error(arrY, model.predict(mtX) )
         print("    MSE: %.4f, MAE: %.4f" % (mse, mae) )
         uNum += 1
         
 #         # cross validation
-#         dcPersonalModels = crossValidate(arrX, arrY, g_modelParams, 3)
+#         dcPersonalModels = crossValidate(mtX, arrY, g_modelParams, 3)
 #         bestModel, fBestScore = max(dcPersonalModels.iteritems(), key=operator.itemgetter(1) )
 #         dcVariableImportance[strUid] = getVariableImportance(bestModel, lsTrainingFeatureNames)
 #         
@@ -310,16 +310,16 @@ def validateOnNJ(strInPath, strOutPath, bSerialize=False):
     del dfAllData[strVideoIDColumnName]
             
     # prepare data set
-    arrX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfAllData, dcColumns2Discretize.keys(), \
+    mtX, arrY, lsTrainingFeatureNames = preprocessDataSet(dfAllData, dcColumns2Discretize.keys(), \
                                                            lsColumns2Vectorize, strLabelColumnName)
     
     # train model
-    model = trainModel(arrX, arrY, g_modelParams)
+    model = trainModel(mtX, arrY, g_modelParams)
     dcVariableImportance[g_strModuleNameForAllUser] = getVariableImportance(model, lsTrainingFeatureNames)
        
     # test
-    mse = mean_squared_error(arrY, model.predict(arrX) )
-    mae = mean_absolute_error(arrY, model.predict(arrX) )
+    mse = mean_squared_error(arrY, model.predict(mtX) )
+    mae = mean_absolute_error(arrY, model.predict(mtX) )
     print("    MSE: %.4f, MAE: %.4f" % (mse, mae) )
     
     dfVariableImportance = pd.DataFrame(dcVariableImportance).T

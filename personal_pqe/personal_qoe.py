@@ -33,11 +33,12 @@ def train(strDataPath):
     nMaxStep = 100
     lsRMSE=[]
 
-    bu, bv, U, P, V, Q  = cmf.fit(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE)
+    U, P, V, Q, mu, rmse_test  = cmf.cross_validate(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE)
     
     cmf.visualizeRMSETrend(lsRMSE)
     
-def multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio):
+def multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, \
+                  arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio):
     #===========================================================================
     # load data & transform into matrix
     #===========================================================================
@@ -70,7 +71,7 @@ def multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAl
         print 'arrlambdas', arrLambdas
         print 'f', f
         print("---------------------------------------------------------------------")
-        U, P, V, Q, mu, rmseR_test  = cmf.fit_test(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE, dTestRatio )
+        U, P, V, Q, mu, rmseR_test  = cmf.cross_validate(R, D, S, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, lsRMSE, dTestRatio )
         
         if type(lsParamSets[i]) is np.ndarray:
             dcResult[lsParamSets[i][0]] = {'train':lsRMSE[-1]['rmseR'], 'test': rmseR_test} # choose param for R as key
@@ -90,7 +91,7 @@ def findBestLambda(strRPath, strDPath, strSPath):
     f = 20
     dLearningRate = 0.0001
     dTestRatio = 0.3
-    nMaxStep = 400
+    nMaxStep = 300
     
     #===========================================================================
     # set different settings
@@ -107,7 +108,10 @@ def findBestLambda(strRPath, strDPath, strSPath):
     #===========================================================================
     # test different settings    
     #===========================================================================
-    dcResult = multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio)
+    dcResult = multipleTrial(strRPath, strDPath, strSPath, \
+                             lsParamSets, strParamName, \
+                             arrAlphas, arrLambdas, \
+                             f, dLearningRate, nMaxStep, dTestRatio)
     
     return dcResult
 
@@ -164,7 +168,7 @@ def testCMF():
         
         lsTrainingRMSE = []
 
-        mu, bu, bv, U, P, V, Q, rmseR_test  = cmf.fit(R, D, S, arrAlphas, arrLambdas, f,\
+        U, P, V, Q, mu, rmseR_test  = cmf.cross_validate(R, D, S, arrAlphas, arrLambdas, f,\
                                dLearningRate, nMaxStep, lsTrainingRMSE, dTestRatio=0.2, bDebugInfo=True)
         
         if (rmseR_test < dMinRmseR):
@@ -181,8 +185,4 @@ if __name__ == '__main__':
     df = pd.DataFrame(dc)
     df.T.plot()
     plt.show()
-
-
-
-
 
