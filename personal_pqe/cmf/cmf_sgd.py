@@ -124,7 +124,7 @@ def init(mtR, mtD, mtS, inplace=False):
     # feature scaling
     #===========================================================================
     # cast R into [0.0, 1.0]
-    R = (R *1.0 /100.0)
+    R = (R *1.0/100.0)
     
     # scaling features to [0,1]
     print ('start to scale features...')
