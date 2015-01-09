@@ -475,7 +475,7 @@ def transformNJData(strDataPath):
     return R, D, S
 
 
-def transformSHData(strUserFilePath, strVideoFilePath, lsUsers2Select=None):
+def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Select=None):
     '''
         This function transform shanghai data set to R, S, D matrices.
         Namely, this function does the following tasks:
@@ -486,7 +486,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, lsUsers2Select=None):
         
         Note:
         
-            user features = 
+            user features (old) = 
                 ['localbase_outer_call_dur', 'ld_call_dur', 'roam_call_dur', \
                 'localbase_called_dur', 'ld_called_dur', 'roam_called_dur', \
                 'cm_dur', 'ct_dur', 'busy_call_dur', 'fest_call_dur', 'sms_p2p_mo_cnt', \
@@ -513,6 +513,39 @@ def transformSHData(strUserFilePath, strVideoFilePath, lsUsers2Select=None):
                  'streaming_filesize', 'streaming_dw_packets', 'streaming_download_delay', \
                  'associated_id', 'l4_ul_throughput', 'l4_dw_throughput', 'intbuffer_full_flag', \
                  'tcp_rtt', 'get_streaming_delay', 'intbuffer_full_delay', 'sid', 'date_partition']
+            
+            user features (new) =      
+            ['msisdn',
+             'age',
+             'gender',
+             'innet_dura',
+             'last_mon_bill_fee',
+             'last_mon_web_flux',
+             'last_mon_web_visit_cnt',
+             'last_mon_web_user_hit_cnt',
+             'last_mon_all_gn_flux',
+             'last_mon_gn_visit_cnt',
+             'ov_up_pptv_flag',
+             'ov_up_youku_flag',
+             'ov_up_sohuvidio_flag',
+             'ov_up_sohuvidio_hq_flag',
+             'gprs_all_flux',
+             'gprs_net_flux',
+             'gprs_net_up_flux',
+             'gprs_net_down_flux',
+             'gprs_wap_flux',
+             'gprs_wap_up_flux',
+             'gprs_wap_down_flux',
+             'gprs_net_cnt',
+             'gprs_wap_cnt',
+             'g3_gprs_up_b',
+             'g3_gprs_down_b',
+             'ov_up_gprs_flux',
+             'gprs_flux',
+             'gprs_charge',
+             'gift_flux_value']
+            
+            
     '''
     
     
@@ -543,78 +576,13 @@ def transformSHData(strUserFilePath, strVideoFilePath, lsUsers2Select=None):
     #===========================================================================
     #----user features----
     strIDColumnName_user = "msisdn"
-    lsColumns2Delete_user = ['free_call_dur','roam_call_minutes']
+#     lsColumns2Delete_user = ['free_call_dur','roam_call_minutes']
+#     dcColumns2Discretize_user = {}
+#     lsColumns2Vectorize_user = ['town_id', 'sale_id', 'product_id']
+    lsColumns2Delete_user = ['last_mon_web_user_hit_cnt', 'ov_up_pptv_flag', \
+                             'ov_up_sohuvidio_flag', 'ov_up_sohuvidio_hq_flag']
     dcColumns2Discretize_user = {}
-#     dcColumns2Discretize_user = {'localbase_outer_call_dur': None, \
-#                                  'ld_call_dur':None, \
-#                                  'roam_call_dur':None, \
-#                                  'localbase_called_dur':None, \
-#                                  'ld_called_dur':None, \
-#                                  'roam_called_dur':None, \
-#                                  'cm_dur':None, \
-#                                  'ct_dur':None, \
-#                                  'busy_call_dur':None, \
-#                                  'fest_call_dur':None, \
-#                                  'sms_p2p_mo_cnt':None, \
-#                                  'sms_p2p_inter_mo_cnt':None, \
-#                                  'sms_p2p_inner_mo_cnt':None, \
-#                                  'sms_p2p_other_mo_cnt':None, \
-#                                  'sms_p2p_cm_mo_cnt':None, \
-#                                  'sms_p2p_ct_mo_cnt':None, \
-#                                  'sms_info_mo_cnt':None, \
-#                                  'sms_p2p_roam_int_mo_cnt':None, \
-#                                  'mms_p2p_mo_cnt':None, \
-#                                  'mms_p2p_inter_mo_cnt':None, \
-#                                  'mms_p2p_inner_mo_cnt':None, \
-#                                  'mms_p2p_other_mo_cnt':None, \
-#                                  'mms_p2p_cm_mo_cnt':None, \
-#                                  'mms_p2p_ct_mo_cnt':None, \
-#                                  'mms_p2p_roam_int_mo_cnt':None, \
-#                                  'all_call_cnt':None, \
-#                                  'voice_cnt':None, \
-#                                  'local_base_call_cnt':None, \
-#                                  'ld_call_cnt':None, \
-#                                  'roam_call_cnt':None, \
-#                                  'caller_cnt':None, \
-#                                  'voice_dur':None, \
-#                                  'caller_dur':None, \
-#                                  'localbase_inner_call_dur':None, \
-#                                  'call_10010_cnt':None, \
-#                                  'call_10010_manual_cnt':None, \
-#                                  'sms_bill_cnt':None, \
-#                                  'sms_p2p_mt_cnt':None, \
-#                                  'mms_cnt':None, \
-#                                  'mms_p2p_mt_cnt':None, \
-#                                  'gprs_all_flux':None, \
-#                                  'age':None, \
-#                                  'credit_value':None ,\
-#                                  'innet_dura':None, \
-#                                  'total_charge':None, \
-#                                  'gprs_flux':None, \
-#                                  'gprs_charge':None, \
-#                                  'local_call_minutes':None, \
-#                                  'toll_call_minutes':None, \
-#                                  'voice_call_minutes':None, \
-#                                  'p2p_sms_mo_cnt':None, \
-#                                  'p2p_sms_mo_charge':None, \
-#                                  'pspt_type':None, \
-#                                  'is_shanghai':None, \
-#                                  'town_id':None, \
-#                                  'sale_id':None, \
-#                                  'pagerank':None, \
-#                                  'product_id':None, \
-#                                  'product_price':None, \
-#                                  'product_knd':None, \
-#                                  'gift_voice_call_dur':None, \
-#                                  'gift_sms_mo_cnt':None, \
-#                                  'gift_flux_value':None, \
-#                                  'distinct_serve_count':None, \
-#                                  'serve_sms_count':None, \
-#                                  'lp':None, \
-#                                  'balance':None, \
-#                                  'balance_diff':None}
-
-    lsColumns2Vectorize_user = ['town_id', 'sale_id', 'product_id']
+    lsColumns2Vectorize_user = []
     
     
     
@@ -623,15 +591,16 @@ def transformSHData(strUserFilePath, strVideoFilePath, lsUsers2Select=None):
     
     lsColumns2Delete_video = ['begin_time_msel', 'imsi', 'server_ip', 'server_port', 'imei',\
                               'streaming_dw_packets', 'associated_id', 'sid',\
-                              'lac', 'sac', 'ci', 'intbuffer_full_delay', 'location', 'host', 'streaming_download_delay']
+                              'lac', 'sac', 'ci', 'intbuffer_full_delay', 'location', \
+                              'host', 'streaming_download_delay', 'intbuffer_full_flag', \
+                              'get_streaming_delay']
     
     dcColumns2Discretize_video = {'begin_time': [7*3600,9*3600,12*3600,14*3600,18*3600,20*3600], \
-                                 'streaming_filesize': [10.0, 50.0, 100.0, 200.0, 300.0, 400.0], \
+                                 'streaming_filesize': [10.0, 50.0, 100.0, 200.0], \
                                  'streaming_download_speed': [50.0, 100,0, 150.0, 200.0, 250.0, 300.0], \
                                  'l4_ul_throughput':[1000.0, 2000.0, 4000.0], \
                                  'l4_dw_throughput':[500.0, 1000.0, 2000.0, 3000.0], \
-                                 'tcp_rtt': [500, 1000, 1500, 2000, 2500, 3000], \
-                                 'get_streaming_delay':[200.0, 400.0, 600.0]}
+                                 'tcp_rtt': [500, 1000, 1500, 2000, 2500, 3000]}
     
     lsColumns2Vectorize_video = ['prot_category', 'prot_type', 'apn', \
                                  'date_partition']
@@ -639,23 +608,22 @@ def transformSHData(strUserFilePath, strVideoFilePath, lsUsers2Select=None):
     #----ratio matrix----
     strLabelColumnName = "ratio"
     
-        
+    
     #===========================================================================
     # transform
     #===========================================================================
-    return transform2mt(dfData_user, strIDColumnName_user, \
-                           lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
-                           dfData_video, strIDColumnName_video, \
-                           lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                           strLabelColumnName, lsUsers2Select)
+    return transform2Matrices(dfData_user, strIDColumnName_user, \
+                              lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
+                              dfData_video, strIDColumnName_video, \
+                              lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
+                              strLabelColumnName, nTop, lsUser2Select)
     
 
 def transform2mt(dfData_user, strIDColumnName_user, \
                  lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                  dfData_video, strIDColumnName_video, \
                  lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                 strLabelColumnName, 
-                 lsUsers2Select):
+                 strLabelColumnName, lsUsers2Select):
     '''
         Given two dataframes which contains user feature and video attribute data,
         this function transform them to R, D, S matrices.
@@ -937,6 +905,212 @@ def AggregateR(lsFrames, lsUserOrder, lsVideoOrder):
     
     return dfR.as_matrix()
 
+def transform2Matrices(dfData_user, strIDColumnName_user, \
+                       lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
+                       dfData_video, strIDColumnName_video, \
+                       lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
+                       strLabelColumnName, nTop=None, lsUsers2Select=None):
+    '''
+        Given two data frames which contains user feature and video feature data, this function 
+        transform them to R, D, S matrices.
+        Specifically, this function does the following works:
+        0. filter out invalid tuples;
+        1. delete useless columns;
+        2. do NOT discretize continuous data (no need!)
+        3. use OneHotEncoder to map categorical data;
+        4. transform into R, D, S;
+        
+        param:
+                as their name described.
+                
+        returns:
+                R, D, S - matrix which use np.nan to represent missing values
+    '''
+    
+    #===========================================================================
+    # filter out invalid tuples
+    #===========================================================================
+    print("start to filter out invalid tuples...")
+    lsMasks_user = (~dfData_user[strIDColumnName_user].isnull() )
+    lsMasks_video = (~dfData_video[strIDColumnName_user].isnull() ) \
+                     & (~dfData_video['streaming_dw_packets'].isnull() ) \
+                     & (~dfData_video['streaming_filesize'].isnull() ) \
+                     & (dfData_video['streaming_dw_packets']<=dfData_video['streaming_filesize'])
+                     
+    dfData_user = dfData_user[lsMasks_user]
+    dfData_video = dfData_video[lsMasks_video]
+    
+    print("-->valid data size: %d users, %d records" % (len(dfData_user), len(dfData_video) ) )
+    
+    #===========================================================================
+    # find common users
+    #===========================================================================
+    print("start to find common users...")
+    # change both of them into string, in case of the wrong type cast of pandas
+    dfData_user[strIDColumnName_user] = dfData_user[strIDColumnName_user].astype(str).str[:11]
+    dfData_video[strIDColumnName_user] = dfData_video[strIDColumnName_user].astype(str).str[:11]
 
-if __name__ == '__main__':
-    transformNJData("d:\\playground\\sh_xdr\\nj\\all_with_router_info.csv")
+    lsCommonUsers = list(\
+                         set(dfData_user[strIDColumnName_user].tolist())    \
+                         & set(dfData_video[strIDColumnName_user].tolist()) \
+                         )
+    
+    print("-->%d users co-exist in both user and video data set." % len(lsCommonUsers) )
+    
+    if (lsUsers2Select is not None):
+        print('start to select some users from common users...' % len(lsUsers2Select) )
+        lsCommonUsers = list( set(lsCommonUsers) & set(lsUsers2Select) )
+    
+    # only use tuples of these selected users
+    dfData_user = dfData_user[ dfData_user[strIDColumnName_user].isin(lsCommonUsers) ]
+    dfData_video = dfData_video[ dfData_video[strIDColumnName_user].isin(lsCommonUsers) ]
+    
+    #===========================================================================
+    # select top users
+    #===========================================================================
+    if (nTop is not None):
+        srUserRank = dfData_video[strIDColumnName_user].value_counts(sort=True, ascending=False)
+        lsTopUsers = (srUserRank.index.tolist())[:nTop]
+        print('start to select top %d users....' % nTop)
+        
+        # only use tuples of these selected users
+        dfData_user = dfData_user[ dfData_user[strIDColumnName_user].isin(lsTopUsers) ]
+        dfData_video = dfData_video[ dfData_video[strIDColumnName_user].isin(lsTopUsers) ]        
+        
+    #===========================================================================
+    # delete useless columns
+    #===========================================================================
+    print("start to delete useless columns...")
+    #----user----
+    for strColName in lsColumns2Delete_user:
+        del dfData_user[strColName]
+        
+    #----video----
+    for strColName in lsColumns2Delete_video:
+        del dfData_video[strColName]
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
+    
+    #===========================================================================
+    # mapping categorical data
+    #===========================================================================
+    print("start to mapping categorical data...")
+    
+    #----user----
+    for strColName in lsColumns2Vectorize_user:
+        sCol = dfData_user[strColName]
+        print("mapping %s, unique value:%d..." % (strColName, len(sCol.unique() ) ) )
+        # digitalize categorical data
+        arrDigits, dcMappingTable = digitalizeColumnEx(sCol)
+        g_dcDigitMappingTable[sCol.name] = dcMappingTable
+        
+        # vectorize
+        enc = prepro.OneHotEncoder()
+        mtEncoded = enc.fit_transform(pd.DataFrame(arrDigits) ).toarray()
+        
+        # add mapped columns
+        for ci in xrange(mtEncoded.shape[1]):
+            strName = "%s_%d" % (strColName, ci)
+            dfData_user[strName] = mtEncoded[:,ci]
+        
+        # delete original column
+        del dfData_user[strColName]
+        
+    #----video----    
+    for strColName in lsColumns2Vectorize_video:
+        sCol = dfData_video[strColName]
+        print("mapping %s, unique value:%d..." % (strColName, len(sCol.unique() ) ) )
+        # digitalize categorical data
+        arrDigits, dcMappingTable = digitalizeColumnEx(sCol)
+        g_dcDigitMappingTable[sCol.name] = dcMappingTable
+        
+        # vectorize
+        enc = prepro.OneHotEncoder()
+        mtEncoded = enc.fit_transform(pd.DataFrame(arrDigits) ).toarray()
+        
+        # add mapped columns
+        for ci in xrange(mtEncoded.shape[1]):
+            strName = "%s_%d" % (strColName, ci)
+            dfData_video[strName] = mtEncoded[:,ci]
+        
+        # delete original column
+        del dfData_video[strColName]
+        
+    # TODO: find way to mapping it back!
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
+    
+    #===========================================================================
+    # transform 2 flatten table
+    #===========================================================================
+    print('start to transform into flatten table...')
+    dfFlattenTable = pd.merge(dfData_video, dfData_user, on=strIDColumnName_user, copy=True)
+    sFlattenLabel = dfFlattenTable[strLabelColumnName]
+    del dfFlattenTable[strLabelColumnName]
+    del dfFlattenTable[strIDColumnName_user]
+    del dfFlattenTable[strIDColumnName_video]
+    
+    #===========================================================================
+    # transfrom into D
+    #===========================================================================
+    print("start to transfrom into D...")
+    dfD = dfData_user.drop_duplicates(strIDColumnName_user)
+    lsUserOrder = dfD[strIDColumnName_user].tolist()
+    
+    #===========================================================================
+    # transform into R
+    #===========================================================================
+    print("start to transform into R...")
+    dfR = pd.DataFrame(index=lsUserOrder)
+    for ind, row in dfData_video.iterrows():
+        strUid = row.loc[strIDColumnName_user]
+        dRatio = row.loc[strLabelColumnName]
+        sCol = pd.Series(index=lsUserOrder)
+        sCol.loc[strUid] = dRatio
+        
+        dfR[ind] = sCol
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
+    
+    #===========================================================================
+    # transform into S
+    #===========================================================================
+    print("start to transform into S...")
+    del dfData_video[strIDColumnName_video]
+    del dfData_video[strIDColumnName_user]
+    del dfData_video[strLabelColumnName]
+    
+    dfS = dfData_video
+    
+    lsVideoOrder = dfS.index.tolist()
+    
+    #===========================================================================
+    # time to reduce memory usage
+    #===========================================================================
+    gc.collect()
+    
+    #===========================================================================
+    # sort to ensure persistance
+    #===========================================================================
+    print('start to sort w.r.t R...')
+    
+    # sort D
+    dfD = dfD.set_index(strIDColumnName_user)
+    dfD = dfD.reindex(lsUserOrder)
+    
+    # sort R
+    dfR = dfR[lsVideoOrder]
+    dfR = dfR.reindex(lsUserOrder)
+    
+    print("Congratulations! transformation is finished.")
+    
+    return dfR, dfD, dfS, dfFlattenTable, sFlattenLabel

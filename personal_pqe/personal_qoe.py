@@ -7,9 +7,7 @@ Description:
 
 import numpy as np
 import cmf.cmf_sgd as cmf
-import data_processing.data2matrix as dm
 import pandas as pd
-import matplotlib.pyplot as plt
 
 def multipleTrial(strRPath, strDPath, strSPath, \
 				  lsParamSets, strParamName, \
@@ -129,10 +127,10 @@ def findBestAlpha(strRPath, strDPath, strSPath):
     return dcResult
         
 if __name__ == '__main__':
-    dc = findBestAlpha('d:\\playground\\sh_xdr\\R_top500.npy', \
+	import matplotlib.pyplot as plt
+	dc = findBestAlpha('d:\\playground\\sh_xdr\\R_top500.npy', \
                   'd:\\playground\\sh_xdr\\D_top500.npy', 
                   "d:\\playground\\sh_xdr\\S_top500.npy")
-    df = pd.DataFrame(dc)
-    df.T.plot()
-    plt.show()
-
+	df = pd.DataFrame(dc)
+	df.T.plot()
+	plt.show()

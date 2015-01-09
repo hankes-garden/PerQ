@@ -13,7 +13,7 @@ import pandas as pd
 import sklearn.preprocessing as prepro
 from sklearn import cross_validation
 import gc
-import matplotlib.pyplot as plt
+
 
 g_dConvergenceThresold = 0.1
 g_gamma0 = 0.01
@@ -80,7 +80,7 @@ def computeParitialGraident(errorR, errorD, errorS, U, V, P, Q, arrAlphas, arrLa
     
     return gradU, gradV, gradP, gradQ
 
-def init(mtR, mtD, mtS, inplace=False):
+def init(mtR, mtD, mtS, inplace, missing_value, bCastR):
     '''
         This function:
         1. return the weight matrices for R,D,S;
@@ -111,12 +111,20 @@ def init(mtR, mtD, mtS, inplace=False):
         
     print('start to construct weight matrices...')
     # weight matrix for sparse matrices, need to be done before filling nan
-    weightR = np.where(R==255, 0.0, 1.0)
+    weightR = None
+    if (missing_value is not None):
+        weightR = np.where(R==missing_value, 0.0, 1.0)
+    else:
+        weightR = np.where(np.isnan(R), 0.0, 1.0)
+        
     weightD = np.where(np.isnan(D), 0.0, 1.0)
     weightS = np.where(np.isnan(S), 0.0, 1.0)
     
     # fill missing values with 0
-    R[R==255] = 0
+    if (missing_value is not None):
+        R[R==missing_value] = 0
+    else:
+        R[np.isnan(R)] = 0
     D[np.isnan(D)] = 0.0
     S[np.isnan(S)] = 0.0
     
@@ -124,7 +132,8 @@ def init(mtR, mtD, mtS, inplace=False):
     # feature scaling
     #===========================================================================
     # cast R into [0.0, 1.0]
-    R = (R *1.0/100.0)
+    if(bCastR):
+        R = (R *1.0/100.0)
     
     # scaling features to [0,1]
     print ('start to scale features...')
@@ -279,7 +288,8 @@ def pred(R, D, S, U, V, P, Q, mu, weightR_test):
     rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / (weightR_test==1.0).sum() )
     return rmseR_test
 
-def cross_validate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10):
+def cross_validate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
+                   missing_value=None, bCastR = False, inplace=False, bDebugInfo=False):
     '''
         This function cross-validates collective matrix factorization model. 
         In particular, it perform:
@@ -313,7 +323,7 @@ def cross_validate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10):
     #===========================================================================
     # init
     #===========================================================================
-    R, D, S, weightR, weightD, weightS, normD, normS = init(mtR, mtD, mtS, inplace=True)
+    R, D, S, weightR, weightD, weightS, normD, normS = init(mtR, mtD, mtS, inplace, missing_value, bCastR)
     
     #===========================================================================
     # cross validation
@@ -349,7 +359,7 @@ def cross_validate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10):
         lsTrainingTrace = []
         U, V, P, Q, mu = fit(R, normD, normS, weightR_train, weightD, weightS, \
                              f, arrAlphas, arrLambdas, nMaxStep, \
-                             lsTrainingTrace, False)
+                             lsTrainingTrace, bDebugInfo)
         
         #===========================================================================
         # test
@@ -375,6 +385,8 @@ def visualizeRMSETrend(lsRMSE):
     '''
         This function visualize the changing of RMSE
     '''
+    import matplotlib.pyplot as plt
+    
     fig, axes = plt.subplots(1, 2)
     df = pd.DataFrame(lsRMSE)
     df = df[['rmseD', 'rmseS', 'rmseR', 'loss']]
@@ -393,21 +405,23 @@ def visualizeRMSETrend(lsRMSE):
     
 if __name__ == '__main__':
     # load data
-    mtR = np.load('d:\\playground\\sh_xdr\\R_top500.npy')
-    mtD = np.load('d:\\playground\\sh_xdr\\D_top500.npy')
-    mtS = np.load('d:\\playground\\sh_xdr\\S_top500.npy')
+    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_top100.npy')
+    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_top100.npy')
+    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
     
     # setup
-    arrAlphas = np.array([0.7, 0.15, 0.15])
+    arrAlphas = np.array([0.5, 0.25, 0.25])
     arrLambdas = np.array([2, 2, 2])
-    f = 20
-    nMaxStep = 300
+    f = 15
+    nMaxStep = 200
     nFold = 5
      
     # cross validation
     dcResult, lsBestTrainingRMSEs = cross_validate(mtR, mtD, mtS, \
                                                    arrAlphas, arrLambdas, \
-                                                   f, nMaxStep, nFold)
+                                                   f, nMaxStep, nFold, \
+                                                   missing_value=None, bCastR=False, \
+                                                   inplace=False, bDebugInfo=True)
     # visualize
     visualizeRMSETrend(lsBestTrainingRMSEs)
     

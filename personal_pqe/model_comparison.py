@@ -12,10 +12,7 @@ from sklearn.metrics import mean_squared_error
 import sklearn.preprocessing as prepro
 from sklearn import cross_validation
 from sklearn.tree import DecisionTreeRegressor
-
-from sklearn.linear_model import LinearRegression
 import math
-
 
 def transformMatrices2FlatTable(strRPath, strDPath, strSPath):
     mtR = np.load(strRPath)
@@ -82,16 +79,6 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10):
             else:
                 model = GradientBoostingRegressor()
             
-        elif (strModelName == 'linear_regression'):
-            # fill nan
-            arrX[np.isnan(arrX)] = 0.0
-            
-            # normalize features
-            min_max_scaler = prepro.MinMaxScaler(copy=False)
-            arrX = min_max_scaler.fit_transform(arrX)
-            
-            model = LinearRegression()
-            
         elif (strModelName == 'decision_tree_regression'):
             # fill nan
             arrX[np.isnan(arrX)] = 0.0
@@ -132,12 +119,15 @@ if __name__ == '__main__':
     #===========================================================================
     # load data
     #===========================================================================
-    strRPath = 'd:\\playground\\sh_xdr\\R_top500.npy'
-    strDPath = 'd:\\playground\\sh_xdr\\D_top500.npy'
-    strSPath = 'd:\\playground\\sh_xdr\\S_top500.npy'
+    strRPath = 'd:\\playground\\personal_qoe\\sh\\R_no_discretize_top100.npy'
+    strDPath = 'd:\\playground\\personal_qoe\\sh\\D_no_discretize_top100.npy'
+    strSPath = 'd:\\playground\\personal_qoe\\sh\\S_no_discretize_top100.npy'
+    
+    strFlattenTable = 'd:\\playground\\personal_qoe\\sh\\mtX_0discre_top100.npy'
+    strFlattenLabel = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_top100.npy'
 
-    print('transforming matrices into flatten table...')
-    mtX, arrY = transformMatrices2FlatTable(strRPath, strDPath, strSPath)
+    mtX = np.load(strFlattenTable)
+    arrY = np.load(strFlattenLabel)
     
     #===========================================================================
     # model setup
@@ -145,17 +135,13 @@ if __name__ == '__main__':
 #     strModelName = 'GBRT'
 #     modelParams = {'n_estimators':100} 
     
-#     strModelName = 'linear_regression'
-#     modelParams = None
-
-    
     strModelName = 'decision_tree_regression'
     modelParams = {'max_depth':4}
     
     #===========================================================================
     # test
     #===========================================================================
-    dcResults = baseline(mtX, arrY, strModelName, modelParams, 10)
+    dcResults = baseline(mtX, arrY, strModelName, modelParams, 5)
     
     #===========================================================================
     # output
