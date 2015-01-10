@@ -9,6 +9,7 @@ import pandas as pd
 import numpy as np
 import sklearn.preprocessing as prepro
 import gc
+import random
 
 g_dcColumns2Discritize = {'BEGIN_TIME': [7*3600,9*3600,12*3600,14*3600,18*3600,20*3600], \
                           'STREAMING_FILESIZE': [10.0, 50.0, 100.0, 200.0, 300.0, 400.0],\
@@ -475,7 +476,7 @@ def transformNJData(strDataPath):
     return R, D, S
 
 
-def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Select=None):
+def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, lsUser2Select=None):
     '''
         This function transform shanghai data set to R, S, D matrices.
         Namely, this function does the following tasks:
@@ -484,8 +485,18 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Selec
         3. setup transform rules;
         4. transform data set to matrices;
         
-        Note:
+        params:
+                strUserFilePath - user data file path
+                strVideoFilePath - video data file path
+                nTotalUser2Sample - total number of user to sample
+                bTop - sample top N users
+                lsUser2Select - specify user to select manually
         
+        returns:
+                dfR, dfD, dfS - dataframe of R, D, S
+                dfFlattenTable - concatenated user and video features, can be used for baseline evaluation
+                sFlattenLabel - labels corresponds to dfFlattenTable
+        Note:
             user features (v1.0) = 
                 ['localbase_outer_call_dur', 'ld_call_dur', 'roam_call_dur', \
                 'localbase_called_dur', 'ld_called_dur', 'roam_called_dur', \
@@ -611,7 +622,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Selec
                               lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                               dfData_video, strIDColumnName_video, \
                               lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                              strLabelColumnName, nTop, lsUser2Select)
+                              strLabelColumnName, nTotalUser2Sample, bTop, lsUser2Select)
     
 
 def transform2mt(dfData_user, strIDColumnName_user, \
@@ -904,7 +915,8 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                        lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                        dfData_video, strIDColumnName_video, \
                        lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                       strLabelColumnName, nTop=None, lsUser2Select=None):
+                       strLabelColumnName, \
+                       nTotalUser2Sample, bTop, lsUser2Select=None):
     '''
         Given two data frames which contains user feature and video feature data, this function 
         transform them to R, D, S matrices.
@@ -916,7 +928,15 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
         4. transform into R, D, S;
         
         param:
-                as their name described.
+                dfData_user, strIDColumnName_user,
+                lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
+                dfData_video, strIDColumnName_video, \
+                lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
+                strLabelColumnName,
+
+                nTotalUser2Sample - total number of user to sample
+                bTop - sample top N users
+                lsUser2Select - specify user to select manually
                 
         returns:
                 R, D, S - matrix which use np.nan to represent missing values
@@ -961,17 +981,21 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     dfData_video = dfData_video[ dfData_video[strIDColumnName_user].isin(lsCommonUsers) ]
     
     #===========================================================================
-    # select top users
+    # sample records
     #===========================================================================
-    if (nTop is not None):
-        srUserRank = dfData_video[strIDColumnName_user].value_counts(sort=True, ascending=False)
-        lsTopUsers = (srUserRank.index.tolist())[:nTop]
-        print('start to select top %d users....' % nTop)
+    if (nTotalUser2Sample is not None):
+        lsUser2Sample = None
+        if (bTop):
+            srUserRank = dfData_video[strIDColumnName_user].value_counts(sort=True, ascending=False)
+            lsUser2Sample = (srUserRank.index.tolist())[:nTotalUser2Sample]
+        else:
+            lsUser2Sample = random.sample(dfData_video[strIDColumnName_user].unique(), nTotalUser2Sample)
         
         # only use tuples of these selected users
-        dfData_user = dfData_user[ dfData_user[strIDColumnName_user].isin(lsTopUsers) ]
-        dfData_video = dfData_video[ dfData_video[strIDColumnName_user].isin(lsTopUsers) ]        
-        
+        print('start to sample %d from %s users....' % (nTotalUser2Sample, ('top' if bTop else 'random') ) )
+        dfData_user = dfData_user[ dfData_user[strIDColumnName_user].isin(lsUser2Sample) ]
+        dfData_video = dfData_video[ dfData_video[strIDColumnName_user].isin(lsUser2Sample) ]
+    
     #===========================================================================
     # delete useless columns
     #===========================================================================
