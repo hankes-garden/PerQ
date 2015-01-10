@@ -410,10 +410,10 @@ if __name__ == '__main__':
     mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
     
     # setup
-    arrAlphas = np.array([0.5, 0.25, 0.25])
-    arrLambdas = np.array([2, 2, 2])
-    f = 15
-    nMaxStep = 200
+    arrAlphas = np.array([0.7, 0.2, 0.3])
+    arrLambdas = np.array([0.5, 0.5, 0.5])
+    f = 5
+    nMaxStep = 300
     nFold = 5
      
     # cross validation
@@ -421,7 +421,7 @@ if __name__ == '__main__':
                                                    arrAlphas, arrLambdas, \
                                                    f, nMaxStep, nFold, \
                                                    missing_value=None, bCastR=False, \
-                                                   inplace=False, bDebugInfo=True)
+                                                   inplace=False, bDebugInfo=False)
     # visualize
     visualizeRMSETrend(lsBestTrainingRMSEs)
     
