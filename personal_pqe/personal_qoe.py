@@ -44,7 +44,7 @@ def multipleTrial(strRPath, strDPath, strSPath, \
         print 'arrlambdas', arrLambdas
         print 'f', f
         
-        dcFoldResults, lsBestTrainingTrace  = cmf.cross_validate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=5)
+        dcFoldResults, lsBestTrainingTrace  = cmf.crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=5)
         
     
         lsTestRMSE = [v['test'] for v in dcFoldResults.values() ]

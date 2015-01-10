@@ -486,7 +486,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Selec
         
         Note:
         
-            user features (old) = 
+            user features (v1.0) = 
                 ['localbase_outer_call_dur', 'ld_call_dur', 'roam_call_dur', \
                 'localbase_called_dur', 'ld_called_dur', 'roam_called_dur', \
                 'cm_dur', 'ct_dur', 'busy_call_dur', 'fest_call_dur', 'sms_p2p_mo_cnt', \
@@ -514,7 +514,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Selec
                  'associated_id', 'l4_ul_throughput', 'l4_dw_throughput', 'intbuffer_full_flag', \
                  'tcp_rtt', 'get_streaming_delay', 'intbuffer_full_delay', 'sid', 'date_partition']
             
-            user features (new) =      
+            user features (v2.0) =      
             ['msisdn',
              'age',
              'gender',
@@ -547,8 +547,6 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Selec
             
             
     '''
-    
-    
     #===========================================================================
     # load data set (no index is used!)
     #===========================================================================
@@ -584,8 +582,6 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Selec
     dcColumns2Discretize_user = {}
     lsColumns2Vectorize_user = []
     
-    
-    
     #----video----
     strIDColumnName_video = "streaming_url"
     
@@ -608,7 +604,6 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTop = None, lsUser2Selec
     #----ratio matrix----
     strLabelColumnName = "ratio"
     
-    
     #===========================================================================
     # transform
     #===========================================================================
@@ -623,7 +618,7 @@ def transform2mt(dfData_user, strIDColumnName_user, \
                  lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                  dfData_video, strIDColumnName_video, \
                  lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                 strLabelColumnName, lsUsers2Select):
+                 strLabelColumnName, lsUser2Select):
     '''
         Given two dataframes which contains user feature and video attribute data,
         this function transform them to R, D, S matrices.
@@ -670,9 +665,9 @@ def transform2mt(dfData_user, strIDColumnName_user, \
                          & set(dfData_video[strIDColumnName_user].tolist()) \
                          )
     
-    if (lsUsers2Select is not None):
-        print('start to select top %d users from common users...' % len(lsUsers2Select) )
-        lsCommonUsers = list( set(lsCommonUsers) & set(lsUsers2Select) )
+    if (lsUser2Select is not None):
+        print('start to select top %d users from common users...' % len(lsUser2Select) )
+        lsCommonUsers = list( set(lsCommonUsers) & set(lsUser2Select) )
         
     print("-->%d users co-exist in both user and video data set." % len(lsCommonUsers) )
     dfData_user = dfData_user[dfData_user[strIDColumnName_user].isin(lsCommonUsers)]
@@ -909,7 +904,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                        lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                        dfData_video, strIDColumnName_video, \
                        lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                       strLabelColumnName, nTop=None, lsUsers2Select=None):
+                       strLabelColumnName, nTop=None, lsUser2Select=None):
     '''
         Given two data frames which contains user feature and video feature data, this function 
         transform them to R, D, S matrices.
@@ -957,9 +952,9 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     
     print("-->%d users co-exist in both user and video data set." % len(lsCommonUsers) )
     
-    if (lsUsers2Select is not None):
-        print('start to select some users from common users...' % len(lsUsers2Select) )
-        lsCommonUsers = list( set(lsCommonUsers) & set(lsUsers2Select) )
+    if (lsUser2Select is not None):
+        print('start to select %d users according to given list...' % len(lsUser2Select) )
+        lsCommonUsers = list( set(lsCommonUsers) & set(lsUser2Select) )
     
     # only use tuples of these selected users
     dfData_user = dfData_user[ dfData_user[strIDColumnName_user].isin(lsCommonUsers) ]
@@ -988,11 +983,6 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     #----video----
     for strColName in lsColumns2Delete_video:
         del dfData_video[strColName]
-    
-    #===========================================================================
-    # time to reduce memory usage
-    #===========================================================================
-    gc.collect()
     
     #===========================================================================
     # mapping categorical data
@@ -1050,14 +1040,15 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     # transform 2 flatten table
     #===========================================================================
     print('start to transform into flatten table...')
-    dfFlattenTable = pd.merge(dfData_video, dfData_user, on=strIDColumnName_user, copy=True)
-    sFlattenLabel = dfFlattenTable[strLabelColumnName]
+    dfFlattenTable = pd.merge(dfData_video, dfData_user, how='inner', \
+                              on=strIDColumnName_user, copy=True)
+    sFlattenLabel = dfData_video[strLabelColumnName]
     del dfFlattenTable[strLabelColumnName]
     del dfFlattenTable[strIDColumnName_user]
     del dfFlattenTable[strIDColumnName_video]
     
     #===========================================================================
-    # transfrom into D
+    # transfrom into D (still include userID for now)
     #===========================================================================
     print("start to transfrom into D...")
     dfD = dfData_user.drop_duplicates(strIDColumnName_user)
@@ -1065,6 +1056,12 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     
     #===========================================================================
     # transform into R
+    # Note: the idea here is that, since we use video feature as an identifier
+    #       of videos, each video records will be treated as unique ''video'',
+    #       because the possibility that two video records have same features
+    #       is so small.
+    #       This could be a problem as it would lead us to a R matrix in which 
+    #       there is only one known ratio in each column. NEED TO THINK IT AGAIN!   
     #===========================================================================
     print("start to transform into R...")
     dfR = pd.DataFrame(index=lsUserOrder)
@@ -1074,7 +1071,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
         sCol = pd.Series(index=lsUserOrder)
         sCol.loc[strUid] = dRatio
         
-        dfR[ind] = sCol
+        dfR[ind] = sCol # use index as new ''vid''
     
     #===========================================================================
     # time to reduce memory usage
@@ -1093,18 +1090,16 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     
     lsVideoOrder = dfS.index.tolist()
     
+   
     #===========================================================================
-    # time to reduce memory usage
-    #===========================================================================
-    gc.collect()
-    
-    #===========================================================================
-    # sort to ensure persistance
+    # sort to ensure these matrices are in some order
     #===========================================================================
     print('start to sort w.r.t R...')
     
+    # no need to sort S any more
+    
     # sort D
-    dfD = dfD.set_index(strIDColumnName_user)
+    dfD = dfD.set_index(strIDColumnName_user) # this also get rid of user ID
     dfD = dfD.reindex(lsUserOrder)
     
     # sort R

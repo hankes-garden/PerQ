@@ -288,7 +288,7 @@ def pred(R, D, S, U, V, P, Q, mu, weightR_test):
     rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / (weightR_test==1.0).sum() )
     return rmseR_test
 
-def cross_validate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
+def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
                    missing_value=None, bCastR = False, inplace=False, bDebugInfo=False):
     '''
         This function cross-validates collective matrix factorization model. 
@@ -417,7 +417,7 @@ if __name__ == '__main__':
     nFold = 5
      
     # cross validation
-    dcResult, lsBestTrainingRMSEs = cross_validate(mtR, mtD, mtS, \
+    dcResult, lsBestTrainingRMSEs = crossValidate(mtR, mtD, mtS, \
                                                    arrAlphas, arrLambdas, \
                                                    f, nMaxStep, nFold, \
                                                    missing_value=None, bCastR=False, \
