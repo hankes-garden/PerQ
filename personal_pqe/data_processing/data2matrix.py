@@ -1064,12 +1064,12 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     # transform 2 flatten table
     #===========================================================================
     print('start to transform into flatten table...')
-    dfFlattenTable = pd.merge(dfData_video, dfData_user, how='inner', \
+    dfX = pd.merge(dfData_video, dfData_user, how='inner', \
                               on=strIDColumnName_user, copy=True)
-    sFlattenLabel = dfData_video[strLabelColumnName]
-    del dfFlattenTable[strLabelColumnName]
-    del dfFlattenTable[strIDColumnName_user]
-    del dfFlattenTable[strIDColumnName_video]
+    srY = dfData_video[strLabelColumnName]
+    del dfX[strLabelColumnName]
+    del dfX[strIDColumnName_user]
+    del dfX[strIDColumnName_video]
     
     #===========================================================================
     # transfrom into D (still include userID for now)
@@ -1132,4 +1132,5 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     
     print("Congratulations! transformation is finished.")
     
-    return dfR, dfD, dfS, dfFlattenTable, sFlattenLabel
+    return dfR, dfD, dfS, dfX, srY
+

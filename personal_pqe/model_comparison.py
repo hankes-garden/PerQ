@@ -123,8 +123,8 @@ if __name__ == '__main__':
     strDPath = 'd:\\playground\\personal_qoe\\sh\\D_no_discretize_top100.npy'
     strSPath = 'd:\\playground\\personal_qoe\\sh\\S_no_discretize_top100.npy'
     
-    strFlattenTable = 'd:\\playground\\personal_qoe\\sh\\mtX_0discre_top100.npy'
-    strFlattenLabel = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_top100.npy'
+    strFlattenTable = 'd:\\playground\\personal_qoe\\sh\\mtX_0discre_rand100.npy'
+    strFlattenLabel = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_rand100.npy'
 
     mtX = np.load(strFlattenTable)
     arrY = np.load(strFlattenLabel)

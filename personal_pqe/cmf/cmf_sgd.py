@@ -13,6 +13,7 @@ import pandas as pd
 import sklearn.preprocessing as prepro
 from sklearn import cross_validation
 import gc
+from sklearn.cluster.hierarchical import AgglomerativeClustering
 
 
 g_dConvergenceThresold = 0.001
@@ -87,14 +88,15 @@ def computeParitialGraident(errorR, errorD, errorS, U, V, P, Q, arrAlphas, arrLa
     
     return gradU, gradV, gradP, gradQ
 
-def init(mtR, mtD, mtS, inplace, missing_value, bCastR):
+def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.5):
     '''
         This function:
         1. return the weight matrices for R,D,S;
         2. fill missing value
-        3. cast R to 0.0~1.0
+        3. cast R to 0.0~1.0 if need
         4. feature scaling for D, S (R does not need feature scaling, 
            since all of its elements are in the same scale)
+        5. reduce dimension of R and S 
            
         Note:
                 if inplace=True, then the content of mtR, mtD, mtS will
@@ -117,51 +119,46 @@ def init(mtR, mtD, mtS, inplace, missing_value, bCastR):
         R = np.copy(mtR)
         D = np.copy(mtD)
         S = np.copy(mtS)
-        
     
     #===========================================================================
-    # weight matrix for sparse matrices, need to be done before filling nan
+    # weight matrix for D, need to be done before filling nan
     #===========================================================================
-    print('start to construct weight matrices...')
-    weightR = None
-    if (missing_value is not None):
-        weightR = np.where(R==missing_value, 0.0, 1.0)
-    else:
-        weightR = np.where(np.isnan(R), 0.0, 1.0)
-        
     weightD = np.where(np.isnan(D), 0.0, 1.0)
-    weightS = np.where(np.isnan(S), 0.0, 1.0)
+    
     
     #===========================================================================
-    # fill missing values (R fill with 0, D,S fill with mean as they need to be normalized)
+    # fill missing values in D and S with mean values as 
+    # they will be feed to feature scaling
     #===========================================================================
-    if (missing_value is not None):
-        R[R==missing_value] = 0
-    else:
-        R[np.isnan(R)] = 0
-        
     imp = prepro.Imputer(missing_values='NaN', strategy='mean', axis=0, copy=False)
     D = imp.fit_transform(D)
     S = imp.fit_transform(S)
-        
-#     D[np.isnan(D)] = 0.0
-#     S[np.isnan(S)] = 0.0
-    
-    
+
     #===========================================================================
     # feature scaling
     #===========================================================================
-    # cast R into [0.0, 1.0]
-    if(bCastR):
-        R = (R *1.0/100.0)
-    
-    # scaling features to [0,1]
     print ('start to scale features...')
-    min_max_scaler = prepro.MinMaxScaler(copy=False)
-    normD = min_max_scaler.fit_transform(D)
-    normS = min_max_scaler.fit_transform(S)
+    # scaling features of D and S to [0,1]
+    scaler = prepro.MinMaxScaler(copy=False)
+    D = scaler.fit_transform(D)
+    S = scaler.fit_transform(S)
     
-    return R, D, S, weightR, weightD, weightS, normD, normS
+    if (bReduceVideoDimension):
+        print('start to reduce video dimension...')
+        #===========================================================================
+        # reduce video dimension
+        #===========================================================================
+        R, S = reduceVideoDimension(R, S, int(S.shape[0]*dReductionRatio))
+        
+    #===========================================================================
+    # get weight matrix and fill missing value in R
+    #===========================================================================
+    weightS = np.where(np.isnan(S), 0.0, 1.0)
+    weightR = np.where(np.isnan(R), 0.0, 1.0)
+    
+    R[np.isnan(R)] = 0.0
+    
+    return R, D, S, weightR, weightD, weightS
 
 def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         f, arrAlphas, arrLambdas, nMaxStep, \
@@ -318,14 +315,14 @@ def pred(R, D, S, U, V, P, Q, mu, weightR_test):
     return rmseR_test
 
 def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
-                   missing_value=None, bCastR = False, inplace=False, bDebugInfo=False):
+                  inplace=False, dReductionRatio=0.5, \
+                  bDebugInfo=False):
     '''
         This function cross-validates collective matrix factorization model. 
         In particular, it perform:
         1. initialize 
         2. fit
         3. test
-        
         
         params:
             mtR         - user-video matrix, m-by-n sparse matrix, 
@@ -352,7 +349,8 @@ def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
     #===========================================================================
     # init
     #===========================================================================
-    R, D, S, weightR, weightD, weightS, normD, normS = init(mtR, mtD, mtS, inplace, missing_value, bCastR)
+    R, D, S, weightR, weightD, weightS = init(mtR, mtD, mtS, inplace, \
+                                              True, dReductionRatio)
     
     #===========================================================================
     # cross validation
@@ -387,7 +385,7 @@ def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
         # train
         #=======================================================================
         lsTrainingTrace = []
-        U, V, P, Q, mu = fit(R, normD, normS, weightR_train, weightR_test, weightD, weightS, \
+        U, V, P, Q, mu = fit(R, D, S, weightR_train, weightR_test, weightD, weightS, \
                              f, arrAlphas, arrLambdas, nMaxStep, \
                              lsTrainingTrace, bDebugInfo)
         
@@ -426,32 +424,79 @@ def visualizeRMSETrend(lsRMSE):
     ax0.set_ylabel('RMSE')
     ax0.yaxis.set_ticks(np.arange(0.0, 1.0, 0.1))
     
-    
     ax1 = df['loss'].plot(ax=axes[1], style='-*')
     ax1.set_xlabel('step')
     ax1.set_ylabel('loss')
     
     plt.show()
     
+def reduceVideoDimension(mtR, mtS, nTargetDimension):
+    '''
+        This function first cluster videos based on their features,
+        then merge similar videos which belongs to same cluster into
+        one video.  
+        
+        parameters:
+                    mtR - NAN for missing value 
+                    mtS - no missing valued any more
+                    nTargetDimension - number of dimension to achieve
+                    
+        returns:
+                    mtR_merged - reduced R matrix, NAN for missing values
+                    mtS_merged - reduced S matrix, no more missing value
+        Note:
+                    this function should be called after R,D,S are normalized
+                    and missing values are also filled
+    '''
+    #===========================================================================
+    # clustering
+    #===========================================================================
+    aggCluster = AgglomerativeClustering(n_clusters=nTargetDimension, linkage='ward', \
+                                         affinity='euclidean')
+    arrClusterIDs = aggCluster.fit_predict(mtS)
+   
+    #===========================================================================
+    # merge
+    #===========================================================================
+    srClusterIDs = pd.Series(arrClusterIDs)
+    mtS_merged = None
+    mtR_merged = None
+    for cid in xrange(nTargetDimension):
+        lsVideos2Merge = srClusterIDs[srClusterIDs==cid].index.tolist()
+        
+        #merge S
+        arrMergedVideoFeatures = np.mean(mtS[lsVideos2Merge, :], axis=0, keepdims=True)
+        if (mtS_merged is None):
+            mtS_merged = arrMergedVideoFeatures
+        else:
+            mtS_merged = np.vstack([mtS_merged, arrMergedVideoFeatures])
+            
+        #merge R
+        arrMergedVideoRatio = np.nanmean(mtR[:, lsVideos2Merge], axis=1, keepdims=True)
+        if (mtR_merged is None):
+            mtR_merged = arrMergedVideoRatio
+        else:
+            mtR_merged = np.hstack([mtR_merged, arrMergedVideoRatio])
+        
+    return mtR_merged, mtS_merged
+    
 if __name__ == '__main__':
     # load data
-    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_rand100.npy')
-    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_rand100.npy')
-    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_rand100.npy')
+    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_top100.npy')
+    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_top100.npy')
+    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
     
     # setup
-    arrAlphas = np.array([0.7, 0.2, 0.3])
-    arrLambdas = np.array([1, 1, 1])
+    arrAlphas = np.array([0.5, 0.2, 0.3])
+    arrLambdas = np.array([4, 4, 4])
     f = 10
     nMaxStep = 500
-    nFold = 10
+    nFold = 5
      
     # cross validation
-    dcResult, lsBestTrainingRMSEs = crossValidate(mtR, mtD, mtS, \
-                                                   arrAlphas, arrLambdas, \
-                                                   f, nMaxStep, nFold, \
-                                                   missing_value=None, bCastR=False, \
-                                                   inplace=False, bDebugInfo=False)
+    dcResult, lsBestTrainingRMSEs = crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, \
+                                                  f, nMaxStep, nFold, inplace=False, dReductionRatio=0.5, \
+                                                  bDebugInfo=False)
     # visualize
     visualizeRMSETrend(lsBestTrainingRMSEs)
     
