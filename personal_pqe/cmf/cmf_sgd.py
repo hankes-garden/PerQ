@@ -15,7 +15,7 @@ from sklearn import cross_validation
 import gc
 
 
-g_dConvergenceThresold = 0.1
+g_dConvergenceThresold = 0.001
 g_gamma0 = 0.01
 g_power_t = 0.25
 
@@ -31,39 +31,46 @@ def getLearningRate(gamma, nIter):
 
 #     return np.log2(nIter+1) / (nIter+1.0) # set to log(n)/n
 
-def computeResidualError(R, D, S, U, V, P, Q, mu, weightR, weightD, weightS, arrAlphas, arrLambdas):
+def computeResidualError(R, D, S, U, V, P, Q, mu, \
+                         weightR_train, weightR_test, weightD_train, weightS_train, \
+                         arrAlphas, arrLambdas):
     #===========================================================================
     # compute initial error
     #===========================================================================
-    # compute error in R (R = mu + bu + bv + U·V^T )
+    # compute error in R (R = mu + U·V^T )
     # predR =  (np.dot(U, V.T) + bu + bv ) + mu # use broadcast to add on each row/column
     predR =  np.dot(U, V.T) + mu
     _errorR = np.subtract(R, predR)
-    errorR = np.multiply(weightR, _errorR)
+    errorR_train = np.multiply(weightR_train, _errorR)
+    
+    # compute test rmse
+    errorR_test = np.multiply(weightR_test, _errorR)
+    rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / (weightR_test==1.0).sum() )
     
     # compute error in normD
     predD = np.dot(U, P.T)
     _errorD = np.subtract(D, predD)
-    errorD = np.multiply(weightD, _errorD)
+    errorD_train = np.multiply(weightD_train, _errorD)
     
     # compute error in normS
     predS = np.dot(V, Q.T)
     _errorS = np.subtract(S, predS)
-    errorS = np.multiply(weightS, _errorS)
+    errorS_train = np.multiply(weightS_train, _errorS)
     
     # compute rmse
-    rmseR = np.sqrt( np.power(errorR, 2.0).sum() / weightR.sum() )
-    rmseD = np.sqrt( np.power(errorD, 2.0).sum() / weightD.sum() )
-    rmseS = np.sqrt( np.power(errorS, 2.0).sum() / weightS.sum() )
+    rmseR_train = np.sqrt( np.power(errorR_train, 2.0).sum() / weightR_train.sum() )
+    rmseD_train = np.sqrt( np.power(errorD_train, 2.0).sum() / weightD_train.sum() )
+    rmseS_train = np.sqrt( np.power(errorS_train, 2.0).sum() / weightS_train.sum() )
     
-    dTotalLost = (arrAlphas[0]/2.0) * np.power(np.linalg.norm(errorR, ord='fro'), 2.0) \
-            + (arrAlphas[1]/2.0) * np.power(np.linalg.norm(errorD, ord='fro'), 2.0) \
-            + (arrAlphas[2]/2.0) * np.power(np.linalg.norm(errorS, ord='fro'), 2.0) \
+    dTotalLost = (arrAlphas[0]/2.0) * np.power(np.linalg.norm(errorR_train, ord='fro'), 2.0) \
+            + (arrAlphas[1]/2.0) * np.power(np.linalg.norm(errorD_train, ord='fro'), 2.0) \
+            + (arrAlphas[2]/2.0) * np.power(np.linalg.norm(errorS_train, ord='fro'), 2.0) \
             + (arrLambdas[0]/2.0) * ( np.power(np.linalg.norm(U, ord='fro'), 2.0) + np.power(np.linalg.norm(V, ord='fro'), 2.0) ) \
             + (arrLambdas[1]/2.0) * np.power(np.linalg.norm(P, ord='fro'), 2.0) \
             + (arrLambdas[2]/2.0) * np.power(np.linalg.norm(Q, ord='fro'), 2.0)
             
-    return errorR, errorD, errorS, rmseR, rmseD, rmseS, dTotalLost
+            
+    return errorR_train, errorD_train, errorS_train, rmseR_train, rmseR_test, rmseD_train, rmseS_train, dTotalLost
 
 def computeParitialGraident(errorR, errorD, errorS, U, V, P, Q, arrAlphas, arrLambdas):
     # U
@@ -94,8 +101,10 @@ def init(mtR, mtD, mtS, inplace, missing_value, bCastR):
                 be modified (e.g., fill missing value with 0)
     '''
     
+    #===========================================================================
     # copy data to prevent modification on original data
     # or don't copy to save memory
+    #===========================================================================
     R = None
     D = None
     S = None
@@ -109,8 +118,11 @@ def init(mtR, mtD, mtS, inplace, missing_value, bCastR):
         D = np.copy(mtD)
         S = np.copy(mtS)
         
-    print('start to construct weight matrices...')
+    
+    #===========================================================================
     # weight matrix for sparse matrices, need to be done before filling nan
+    #===========================================================================
+    print('start to construct weight matrices...')
     weightR = None
     if (missing_value is not None):
         weightR = np.where(R==missing_value, 0.0, 1.0)
@@ -120,13 +132,21 @@ def init(mtR, mtD, mtS, inplace, missing_value, bCastR):
     weightD = np.where(np.isnan(D), 0.0, 1.0)
     weightS = np.where(np.isnan(S), 0.0, 1.0)
     
-    # fill missing values with 0
+    #===========================================================================
+    # fill missing values (R fill with 0, D,S fill with mean as they need to be normalized)
+    #===========================================================================
     if (missing_value is not None):
         R[R==missing_value] = 0
     else:
         R[np.isnan(R)] = 0
-    D[np.isnan(D)] = 0.0
-    S[np.isnan(S)] = 0.0
+        
+    imp = prepro.Imputer(missing_values='NaN', strategy='mean', axis=0, copy=False)
+    D = imp.fit_transform(D)
+    S = imp.fit_transform(S)
+        
+#     D[np.isnan(D)] = 0.0
+#     S[np.isnan(S)] = 0.0
+    
     
     #===========================================================================
     # feature scaling
@@ -143,7 +163,7 @@ def init(mtR, mtD, mtS, inplace, missing_value, bCastR):
     
     return R, D, S, weightR, weightD, weightS, normD, normS
 
-def fit(R, D, S, weightR, weightD, weightS, \
+def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         f, arrAlphas, arrLambdas, nMaxStep, \
         lsTrainingTrace, bDebugInfo=True):
     '''
@@ -161,7 +181,7 @@ def fit(R, D, S, weightR, weightD, weightS, \
     Q = np.random.rand(S.shape[1], f)
     
     # compute mu ( for mean normalization), must be calculated after masking test data
-    mu = ( (R*weightR).sum(axis=1)*1.0) / weightR.sum(axis=1)
+    mu = ( (R*weightR_train).sum(axis=1)*1.0) / weightR_train.sum(axis=1)
     mu = np.reshape(mu, (mu.shape[0], 1) )
     mu[np.isnan(mu)] = 0.0
     
@@ -177,17 +197,16 @@ def fit(R, D, S, weightR, weightD, weightS, \
         
         # compute error
         mtCurrentErrorR, mtCurrentErrorD, mtCurrentErrorS, \
-        dCurrentRmseR, dCurrentRmseD, dCurrentRmseS, \
+        dCurrentRmseR, dCurrentRmseR_test, dCurrentRmseD, dCurrentRmseS, \
         dCurrentLoss = computeResidualError(R, D, S, currentU, currentV, currentP, currentQ, mu, \
-                                            weightR, weightD, weightS, arrAlphas, arrLambdas)
-        
-        dNextLoss = None
-        dNextRmseR = None
+                                            weightR_train, weightR_test, weightD_train, weightS_train, \
+                                            arrAlphas, arrLambdas)
         
         # save RMSE
         if (lsTrainingTrace is not None):
             dcRMSE = {}
             dcRMSE['rmseR'] = dCurrentRmseR
+            dcRMSE['rmseR_test'] = dCurrentRmseR_test
             dcRMSE['rmseD'] = dCurrentRmseD
             dcRMSE['rmseS'] = dCurrentRmseS
             dcRMSE['loss'] = dCurrentLoss
@@ -198,6 +217,7 @@ def fit(R, D, S, weightR, weightD, weightS, \
             print("------------------------------")
             print("step %d" % (nStep) )
             print("    RMSE(R) = %f" % dCurrentRmseR )
+            print("    RMSE(R)_test = %f" % dCurrentRmseR_test )
             print("    RMSE(D) = %f" % dCurrentRmseD )
             print("    RMSE(S) = %f" % dCurrentRmseS )
             print("    loss = %f" % dCurrentLoss )
@@ -211,6 +231,11 @@ def fit(R, D, S, weightR, weightD, weightS, \
         #=======================================================================
         # search for max step
         #=======================================================================
+        dNextRmseR = None
+        dNextRmseR_test = None
+        dNextRmseD = None
+        dNextRmseS = None
+        dNextLoss = None
         gamma = 1.0
         while(True):
             # U
@@ -222,9 +247,11 @@ def fit(R, D, S, weightR, weightD, weightS, \
             # Q
             nextQ = currentQ - gamma*gradQ
              
-            dNextErrorR, dNextErrorD, dNextErrorS, dNextRmseR, dNextRmseD, dNextRmseS, dNextLoss = \
-                computeResidualError(R, D, S, nextU, nextV, nextP, nextQ, mu, \
-                                     weightR, weightD, weightS, arrAlphas, arrLambdas)
+            dNextErrorR, dNextErrorD, dNextErrorS, \
+            dNextRmseR, dNextRmseR_test, dNextRmseD, dNextRmseS, \
+            dNextLoss = computeResidualError(R, D, S, nextU, nextV, nextP, nextQ, mu, \
+                                             weightR_train, weightR_test, weightD_train, weightS_train, \
+                                             arrAlphas, arrLambdas)
                  
             if (dNextLoss >= dCurrentLoss):
                 # search for max step size
@@ -244,21 +271,23 @@ def fit(R, D, S, weightR, weightD, weightS, \
         #=======================================================================
         dChange = dCurrentLoss-dNextLoss
         if( dChange>=0.0 and dChange<=g_dConvergenceThresold): 
-            print("converged~! loss=%f, rmseR=%f" % (dNextLoss, dNextRmseR) )
+            print("converged @ step %d: loss=%f, rmseR=%f" % (nStep, dNextLoss, dNextRmseR) )
             
             # save RMSE
             if (lsTrainingTrace is not None):
                 dcRMSE = {}
-                dcRMSE['rmseR'] = dCurrentRmseR
-                dcRMSE['rmseD'] = dCurrentRmseD
-                dcRMSE['rmseS'] = dCurrentRmseS
-                dcRMSE['loss'] = dCurrentLoss
+                dcRMSE['rmseR'] = dNextRmseR
+                dcRMSE['rmseR_test'] = dNextRmseR_test
+                dcRMSE['rmseD'] = dNextRmseD
+                dcRMSE['rmseS'] = dNextRmseS
+                dcRMSE['loss'] = dNextLoss
                 lsTrainingTrace.append(dcRMSE)
                 
             if (bDebugInfo):
                 print("------------------------------")
                 print("final step:")
                 print("    RMSE(R) = %f" % dNextRmseR )
+                print("    RMSE(R)_test = %f" % dNextRmseR_test )
                 print("    RMSE(normD) = %f" % dNextRmseD )
                 print("    RMSE(normS) = %f" % dNextRmseS )
                 print("    loss = %f" % dNextLoss )
@@ -331,7 +360,7 @@ def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
     print('start cross validation...')
     
     # cut
-    arrNonzeroRows, arrNonzeroCols = np.nonzero(R)
+    arrNonzeroRows, arrNonzeroCols = np.nonzero(R) # already filled missing value in R by 0
     kf = cross_validation.KFold(len(arrNonzeroRows), nFold, shuffle=True)
 
     dcResults = {}
@@ -341,6 +370,7 @@ def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
     for arrTrainIndex, arrTestIndex in kf:
         print("=================")
         print("%d of %d folds..." % (nCount, nFold) )
+        
         #=======================================================================
         # prepare train/test data    
         #=======================================================================
@@ -357,7 +387,7 @@ def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
         # train
         #=======================================================================
         lsTrainingTrace = []
-        U, V, P, Q, mu = fit(R, normD, normS, weightR_train, weightD, weightS, \
+        U, V, P, Q, mu = fit(R, normD, normS, weightR_train, weightR_test, weightD, weightS, \
                              f, arrAlphas, arrLambdas, nMaxStep, \
                              lsTrainingTrace, bDebugInfo)
         
@@ -389,9 +419,9 @@ def visualizeRMSETrend(lsRMSE):
     
     fig, axes = plt.subplots(1, 2)
     df = pd.DataFrame(lsRMSE)
-    df = df[['rmseD', 'rmseS', 'rmseR', 'loss']]
-    df.columns = ['D', 'S', 'R', 'loss']
-    ax0 = df[['D', 'S', 'R'] ].plot(ax=axes[0], style=['--','-.', '-' ], ylim=(0,1))
+    df = df[['rmseD', 'rmseS', 'rmseR', 'rmseR_test', 'loss']]
+    df.columns = ['D', 'S', 'R', 'R_test', 'loss']
+    ax0 = df[['D', 'S', 'R', 'R_test'] ].plot(ax=axes[0], style=['--','-.', '-', '-+' ], ylim=(0,1))
     ax0.set_xlabel('step')
     ax0.set_ylabel('RMSE')
     ax0.yaxis.set_ticks(np.arange(0.0, 1.0, 0.1))
@@ -405,16 +435,16 @@ def visualizeRMSETrend(lsRMSE):
     
 if __name__ == '__main__':
     # load data
-    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_top100.npy')
-    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_top100.npy')
-    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
+    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_rand100.npy')
+    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_rand100.npy')
+    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_rand100.npy')
     
     # setup
     arrAlphas = np.array([0.7, 0.2, 0.3])
-    arrLambdas = np.array([0.5, 0.5, 0.5])
-    f = 5
-    nMaxStep = 300
-    nFold = 5
+    arrLambdas = np.array([1, 1, 1])
+    f = 10
+    nMaxStep = 500
+    nFold = 10
      
     # cross validation
     dcResult, lsBestTrainingRMSEs = crossValidate(mtR, mtD, mtS, \
