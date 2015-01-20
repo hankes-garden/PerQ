@@ -476,7 +476,7 @@ def transformNJData(strDataPath):
     return R, D, S
 
 
-def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, lsUser2Select=None):
+def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, lsUser2Select=None, bOnlyXY=False):
     '''
         This function transform shanghai data set to R, S, D matrices.
         Namely, this function does the following tasks:
@@ -622,7 +622,8 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, 
                               lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                               dfData_video, strIDColumnName_video, \
                               lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                              strLabelColumnName, nTotalUser2Sample, bTop, lsUser2Select)
+                              strLabelColumnName, nTotalUser2Sample, bTop, lsUser2Select,\
+                              bOnlyXY)
     
 
 def transform2mt(dfData_user, strIDColumnName_user, \
@@ -916,7 +917,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                        dfData_video, strIDColumnName_video, \
                        lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
                        strLabelColumnName, \
-                       nTotalUser2Sample, bTop, lsUser2Select=None):
+                       nTotalUser2Sample, bTop, lsUser2Select=None, bOnlyXY=False):
     '''
         Given two data frames which contains user feature and video feature data, this function 
         transform them to R, D, S matrices.
@@ -1071,66 +1072,67 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     del dfX[strIDColumnName_user]
     del dfX[strIDColumnName_video]
     
-    #===========================================================================
-    # transfrom into D (still include userID for now)
-    #===========================================================================
-    print("start to transfrom into D...")
-    dfD = dfData_user.drop_duplicates(strIDColumnName_user)
-    lsUserOrder = dfD[strIDColumnName_user].tolist()
-    
-    #===========================================================================
-    # transform into R
-    # Note: the idea here is that, since we use video feature as an identifier
-    #       of videos, each video records will be treated as unique ''video'',
-    #       because the possibility that two video records have same features
-    #       is so small.
-    #       This could be a problem as it would lead us to a R matrix in which 
-    #       there is only one known ratio in each column. NEED TO THINK IT AGAIN!   
-    #===========================================================================
-    print("start to transform into R...")
-    dfR = pd.DataFrame(index=lsUserOrder)
-    for ind, row in dfData_video.iterrows():
-        strUid = row.loc[strIDColumnName_user]
-        dRatio = row.loc[strLabelColumnName]
-        sCol = pd.Series(index=lsUserOrder)
-        sCol.loc[strUid] = dRatio
+    if(bOnlyXY is False):
+        #===========================================================================
+        # transfrom into D (still include userID for now)
+        #===========================================================================
+        print("start to transfrom into D...")
+        dfD = dfData_user.drop_duplicates(strIDColumnName_user)
+        lsUserOrder = dfD[strIDColumnName_user].tolist()
         
-        dfR[ind] = sCol # use index as new ''vid''
+        #===========================================================================
+        # transform into R
+        # Note: the idea here is that, since we use video feature as an identifier
+        #       of videos, each video records will be treated as unique ''video'',
+        #       because the possibility that two video records have same features
+        #       is so small.
+        #       This could be a problem as it would lead us to a R matrix in which 
+        #       there is only one known ratio in each column. NEED TO THINK IT AGAIN!   
+        #===========================================================================
+        print("start to transform into R...")
+        dfR = pd.DataFrame(index=lsUserOrder)
+        for ind, row in dfData_video.iterrows():
+            strUid = row.loc[strIDColumnName_user]
+            dRatio = row.loc[strLabelColumnName]
+            sCol = pd.Series(index=lsUserOrder)
+            sCol.loc[strUid] = dRatio
+            
+            dfR[ind] = sCol # use index as new ''vid''
+        
+        #===========================================================================
+        # time to reduce memory usage
+        #===========================================================================
+        gc.collect()
+        
+        #===========================================================================
+        # transform into S
+        #===========================================================================
+        print("start to transform into S...")
+        del dfData_video[strIDColumnName_video]
+        del dfData_video[strIDColumnName_user]
+        del dfData_video[strLabelColumnName]
+        
+        dfS = dfData_video
+        lsVideoOrder = dfS.index.tolist()
+       
+        #===========================================================================
+        # sort to ensure these matrices are in some order
+        #===========================================================================
+        print('start to sort w.r.t R...')
+        
+        # no need to sort S any more
+        
+        # sort D
+        dfD = dfD.set_index(strIDColumnName_user) # this also get rid of user ID
+        dfD = dfD.reindex(lsUserOrder)
+        
+        # sort R
+        dfR = dfR[lsVideoOrder]
+        dfR = dfR.reindex(lsUserOrder)
     
-    #===========================================================================
-    # time to reduce memory usage
-    #===========================================================================
-    gc.collect()
-    
-    #===========================================================================
-    # transform into S
-    #===========================================================================
-    print("start to transform into S...")
-    del dfData_video[strIDColumnName_video]
-    del dfData_video[strIDColumnName_user]
-    del dfData_video[strLabelColumnName]
-    
-    dfS = dfData_video
-    
-    lsVideoOrder = dfS.index.tolist()
-    
-   
-    #===========================================================================
-    # sort to ensure these matrices are in some order
-    #===========================================================================
-    print('start to sort w.r.t R...')
-    
-    # no need to sort S any more
-    
-    # sort D
-    dfD = dfD.set_index(strIDColumnName_user) # this also get rid of user ID
-    dfD = dfD.reindex(lsUserOrder)
-    
-    # sort R
-    dfR = dfR[lsVideoOrder]
-    dfR = dfR.reindex(lsUserOrder)
-    
-    print("Congratulations! transformation is finished.")
-    
-    return dfR, dfD, dfS, dfX, srY
-
+        print("Congratulations! transformation of R,D,S,X,Y is finished.")
+        
+        return dfR, dfD, dfS, dfX, srY
+    else:
+        print("Congratulations! transformation of X,Y is finished.")
+        return dfX, srY

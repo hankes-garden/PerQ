@@ -5,13 +5,14 @@ Description:
 @author: jason
 '''
 import numpy as np
-import operator
+import pandas as pd
 
 from sklearn.ensemble import GradientBoostingRegressor 
 from sklearn.metrics import mean_squared_error
 import sklearn.preprocessing as prepro
 from sklearn import cross_validation
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LinearRegression
 import math
 
 def transformMatrices2FlatTable(strRPath, strDPath, strSPath):
@@ -40,14 +41,15 @@ def transformMatrices2FlatTable(strRPath, strDPath, strSPath):
     
     return mtFeatures, np.array(lsLabels)
 
-def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10):
+def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10, lsFeatureNames=None):
     '''
         Use given model as a baseline
         
         params:
                 arrX - features
                 arry - labels
-                strModelName - model to use
+                strModelName - model to usefdsclfds
+                
                 dcModelParams - model params
                 nFold - # fold
         return:
@@ -63,6 +65,7 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10):
     print('start to cross validate...')
     i = 0
     for arrTrainIndex, arrTestIndex in kf:
+        dcCurFold = {}
         # setup model
         model = None
         if (strModelName == 'GBRT'):
@@ -91,6 +94,15 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10):
                 model = DecisionTreeRegressor(**dcModelParams)
             else:
                 model = DecisionTreeRegressor()
+                
+        elif (strModelName == 'linear_regression'):
+            # fill nan
+            arrX[np.isnan(arrX)] = 0.0
+            
+            if dcModelParams is not None:
+                model = LinearRegression(**dcModelParams)
+            else:
+                model = LinearRegression()
         else:
             print 'unsupported baseline!'
             break
@@ -107,9 +119,17 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10):
         
         rmse = math.sqrt(mean_squared_error(arrY_test, arrY_pred))
         
-        print('-->%d fold cross validation: rmse=%f' % (i, rmse) )
-        dcResults[i] = rmse
+        lsFeatureImportance = None
+        if (lsFeatureNames is not None):
+            assert(len(lsFeatureNames) == len(model.feature_importances_) )
+            lsFeatureImportance = zip(lsFeatureNames, model.feature_importances_)
+            
+        dcCurFold['rmse'] = rmse
+        dcCurFold['feature_importance'] = lsFeatureImportance
         
+        print('-->%d fold cross validation: rmse=%f' % (i, rmse) )
+        
+        dcResults[i] = dcCurFold
         i = i+1
     
     return dcResults
@@ -123,31 +143,53 @@ if __name__ == '__main__':
     strDPath = 'd:\\playground\\personal_qoe\\sh\\D_no_discretize_top100.npy'
     strSPath = 'd:\\playground\\personal_qoe\\sh\\S_no_discretize_top100.npy'
     
-    strFlattenTable = 'd:\\playground\\personal_qoe\\sh\\mtX_0discre_rand100.npy'
-    strFlattenLabel = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_rand100.npy'
+    strmtXPath = 'd:\\playground\\personal_qoe\\sh\\mtX_0begin_time_video_rand1000.npy'
+    strarrYPath = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_rand1000.npy'
+    
+    strdfXPath = 'd:\\playground\\personal_qoe\\sh\\dfX_0begin_time_video_rand1000'
 
-    mtX = np.load(strFlattenTable)
-    arrY = np.load(strFlattenLabel)
+    mtX = np.load(strmtXPath)
+    arrY = np.load(strarrYPath)
+    dfX = pd.read_pickle(strdfXPath)
     
     #===========================================================================
     # model setup
     #===========================================================================
-#     strModelName = 'GBRT'
-#     modelParams = {'n_estimators':100} 
+    strModelName = 'GBRT'
+    modelParams = {'n_estimators':10} 
     
-    strModelName = 'decision_tree_regression'
-    modelParams = {'max_depth':4}
-    
+#     strModelName = 'decision_tree_regression'
+#     modelParams = {'max_depth':4}
+
+#     strModelName = 'linear_regression'
+#     modelParams = {'normalize':False}
+
     #===========================================================================
     # test
     #===========================================================================
-    dcResults = baseline(mtX, arrY, strModelName, modelParams, 5)
+    nFold = 10
+    dcResults = baseline(mtX, arrY, strModelName, modelParams, nFold, lsFeatureNames=dfX.columns.tolist())
     
     #===========================================================================
     # output
     #===========================================================================
-    fBestScore = min(dcResults.values() )
+    lsRMSEs = [i['rmse'] for i in dcResults.values()]
+    dBestScore = np.min(lsRMSEs)
+    dMeanScore = np.mean(lsRMSEs)
+    dStd = np.std(lsRMSEs )
+    print("cross validation is finished. \n--> best=%f, mean=%f, std=%f." % (dBestScore, dMeanScore, dStd ) )
     
-    print("cross validation is finished. \n--> best=%f, mean=%f, std=%f." % \
-          (fBestScore, np.mean(dcResults.values() ), np.std(dcResults.values() ) ) )
+    #===========================================================================
+    # feature importance
+    #===========================================================================
+    print("*****Feature importance*****")
+    for k,v in dcResults.iteritems():
+        lsFeatureImportance = v['feature_importance']
+        if (lsFeatureImportance is not None):
+            srFeatureImportance = pd.Series([tp[1] for tp in lsFeatureImportance], \
+                                            index=[tp[0] for tp in lsFeatureImportance])
+            
+            srFeatureImportance.sort(ascending=False)
 
+            print("----fold%d: rmse=%f----" % (k, v['rmse']))
+            print srFeatureImportance.iloc[:10]

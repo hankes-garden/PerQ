@@ -16,7 +16,7 @@ import gc
 from sklearn.cluster.hierarchical import AgglomerativeClustering
 
 
-g_dConvergenceThresold = 0.001
+g_dConvergenceThresold = 0.5
 g_gamma0 = 0.01
 g_power_t = 0.25
 
@@ -44,9 +44,9 @@ def computeResidualError(R, D, S, U, V, P, Q, mu, \
     _errorR = np.subtract(R, predR)
     errorR_train = np.multiply(weightR_train, _errorR)
     
-    # compute test rmse
+    # compute test error in R
     errorR_test = np.multiply(weightR_test, _errorR)
-    rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / (weightR_test==1.0).sum() )
+    
     
     # compute error in normD
     predD = np.dot(U, P.T)
@@ -62,6 +62,7 @@ def computeResidualError(R, D, S, U, V, P, Q, mu, \
     rmseR_train = np.sqrt( np.power(errorR_train, 2.0).sum() / weightR_train.sum() )
     rmseD_train = np.sqrt( np.power(errorD_train, 2.0).sum() / weightD_train.sum() )
     rmseS_train = np.sqrt( np.power(errorS_train, 2.0).sum() / weightS_train.sum() )
+    rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / weightR_test.sum() )
     
     dTotalLost = (arrAlphas[0]/2.0) * np.power(np.linalg.norm(errorR_train, ord='fro'), 2.0) \
             + (arrAlphas[1]/2.0) * np.power(np.linalg.norm(errorD_train, ord='fro'), 2.0) \
@@ -88,7 +89,7 @@ def computeParitialGraident(errorR, errorD, errorS, U, V, P, Q, arrAlphas, arrLa
     
     return gradU, gradV, gradP, gradQ
 
-def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.5):
+def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.7):
     '''
         This function:
         1. return the weight matrices for R,D,S;
@@ -143,19 +144,19 @@ def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.5
     D = scaler.fit_transform(D)
     S = scaler.fit_transform(S)
     
+    #===========================================================================
+    # reduce video dimension
+    #===========================================================================
     if (bReduceVideoDimension):
         print('start to reduce video dimension...')
-        #===========================================================================
-        # reduce video dimension
-        #===========================================================================
         R, S = reduceVideoDimension(R, S, int(S.shape[0]*dReductionRatio))
         
-    #===========================================================================
-    # get weight matrix and fill missing value in R
-    #===========================================================================
+    # get weight matrix
+    weightR = np.where(np.isnan(R), 0.0, 1.0) 
     weightS = np.where(np.isnan(S), 0.0, 1.0)
-    weightR = np.where(np.isnan(R), 0.0, 1.0)
     
+    
+    # fill missing value in R
     R[np.isnan(R)] = 0.0
     
     return R, D, S, weightR, weightD, weightS
@@ -233,7 +234,7 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         dNextRmseD = None
         dNextRmseS = None
         dNextLoss = None
-        gamma = 1.0
+        gamma = 0.1
         while(True):
             # U
             nextU = currentU - gamma*gradU
@@ -314,8 +315,8 @@ def pred(R, D, S, U, V, P, Q, mu, weightR_test):
     rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / (weightR_test==1.0).sum() )
     return rmseR_test
 
-def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
-                  inplace=False, dReductionRatio=0.5, \
+def crossValidate(R, D, S, weightR, weightD, weightS, \
+                  arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
                   bDebugInfo=False):
     '''
         This function cross-validates collective matrix factorization model. 
@@ -344,13 +345,6 @@ def crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
             2. input matrices may use both np.nan and 255 to represent missing values, 
                but in the computing core of CMF, we use 0 to represent missing value;
     '''
-    
-    print('start to initialize...')
-    #===========================================================================
-    # init
-    #===========================================================================
-    R, D, S, weightR, weightD, weightS = init(mtR, mtD, mtS, inplace, \
-                                              True, dReductionRatio)
     
     #===========================================================================
     # cross validation
@@ -451,6 +445,7 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
     #===========================================================================
     # clustering
     #===========================================================================
+    print('start to clustering similar videos...')
     aggCluster = AgglomerativeClustering(n_clusters=nTargetDimension, linkage='ward', \
                                          affinity='euclidean')
     arrClusterIDs = aggCluster.fit_predict(mtS)
@@ -458,6 +453,7 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
     #===========================================================================
     # merge
     #===========================================================================
+    print('start to merge clusters...')
     srClusterIDs = pd.Series(arrClusterIDs)
     mtS_merged = None
     mtR_merged = None
@@ -465,7 +461,7 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
         lsVideos2Merge = srClusterIDs[srClusterIDs==cid].index.tolist()
         
         #merge S
-        arrMergedVideoFeatures = np.mean(mtS[lsVideos2Merge, :], axis=0, keepdims=True)
+        arrMergedVideoFeatures = np.nanmean(mtS[lsVideos2Merge, :], axis=0, keepdims=True)
         if (mtS_merged is None):
             mtS_merged = arrMergedVideoFeatures
         else:
@@ -482,20 +478,29 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
     
 if __name__ == '__main__':
     # load data
-    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_top100.npy')
-    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_top100.npy')
-    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
+    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_rand1000.npy')
+    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_rand1000.npy')
+    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_rand1000.npy')
     
     # setup
-    arrAlphas = np.array([0.5, 0.2, 0.3])
-    arrLambdas = np.array([4, 4, 4])
-    f = 10
-    nMaxStep = 500
-    nFold = 5
+    arrAlphas = np.array([1, 0.5, 0.1])
+    arrLambdas = np.array([5.0, 5.0, 5.0])
+    f = 5
+    nMaxStep = 300
+    nFold = 10
+    
+    # init
+    print('start to initialize...')
+    R_reduced, D_reduced, S_reduced, \
+    weightR_reduced, weightD_reduced, \
+    weightS_reduced = init(mtR, mtD, mtS, inplace=False, \
+                           bReduceVideoDimension=False, dReductionRatio=0.7)
      
     # cross validation
-    dcResult, lsBestTrainingRMSEs = crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, \
-                                                  f, nMaxStep, nFold, inplace=False, dReductionRatio=0.5, \
+    dcResult, lsBestTrainingRMSEs = crossValidate(R_reduced, D_reduced, S_reduced, \
+                                                  weightR_reduced, weightD_reduced, weightS_reduced, \
+                                                  arrAlphas, arrLambdas, \
+                                                  f, nMaxStep, nFold, \
                                                   bDebugInfo=False)
     # visualize
     visualizeRMSETrend(lsBestTrainingRMSEs)

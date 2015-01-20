@@ -50,7 +50,7 @@ def int2ip(addr):
 def serialize2File(strOutFilePath, obj):
     if len(obj) != 0:
         with open(strOutFilePath, 'w') as hOutFile:
-            pickle.dump(obj, hOutFile, protocol=-1)
+            pickle.dump(obj, hOutFile)
     else:
         print("Nothing to serialize!")
    
