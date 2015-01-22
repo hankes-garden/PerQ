@@ -478,9 +478,9 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
     
 if __name__ == '__main__':
     # load data
-    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_rand1000.npy')
-    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_rand1000.npy')
-    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_rand1000.npy')
+    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_top100.npy')
+    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_top100.npy')
+    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
     
     # setup
     arrAlphas = np.array([1, 0.5, 0.1])

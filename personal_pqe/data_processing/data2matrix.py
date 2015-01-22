@@ -1071,6 +1071,8 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     del dfX[strLabelColumnName]
     del dfX[strIDColumnName_user]
     del dfX[strIDColumnName_video]
+    nVideoFeatureEnd = dfData_video.shape[1] - 3 + 1
+    
     
     if(bOnlyXY is False):
         #===========================================================================
@@ -1132,7 +1134,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     
         print("Congratulations! transformation of R,D,S,X,Y is finished.")
         
-        return dfR, dfD, dfS, dfX, srY
+        return dfR, dfD, dfS, dfX, srY, nVideoFeatureEnd
     else:
         print("Congratulations! transformation of X,Y is finished.")
-        return dfX, srY
+        return dfX, srY, nVideoFeatureEnd

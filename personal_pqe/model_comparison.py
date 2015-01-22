@@ -143,10 +143,10 @@ if __name__ == '__main__':
     strDPath = 'd:\\playground\\personal_qoe\\sh\\D_no_discretize_top100.npy'
     strSPath = 'd:\\playground\\personal_qoe\\sh\\S_no_discretize_top100.npy'
     
-    strmtXPath = 'd:\\playground\\personal_qoe\\sh\\mtX_0begin_time_video_rand1000.npy'
-    strarrYPath = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_rand1000.npy'
+    strmtXPath = 'd:\\playground\\personal_qoe\\sh\\mtX_0discre_top100.npy'
+    strarrYPath = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_top100.npy'
     
-    strdfXPath = 'd:\\playground\\personal_qoe\\sh\\dfX_0begin_time_video_rand1000'
+    strdfXPath = 'd:\\playground\\personal_qoe\\sh\\dfX_0discre_rand1000'
 
     mtX = np.load(strmtXPath)
     arrY = np.load(strarrYPath)
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     # model setup
     #===========================================================================
     strModelName = 'GBRT'
-    modelParams = {'n_estimators':10} 
+    modelParams = {'n_estimators':100} 
     
 #     strModelName = 'decision_tree_regression'
 #     modelParams = {'max_depth':4}
@@ -168,7 +168,7 @@ if __name__ == '__main__':
     # test
     #===========================================================================
     nFold = 10
-    dcResults = baseline(mtX, arrY, strModelName, modelParams, nFold, lsFeatureNames=dfX.columns.tolist())
+    dcResults = baseline(mtX, arrY, strModelName, modelParams, nFold, lsFeatureNames=None)
     
     #===========================================================================
     # output
