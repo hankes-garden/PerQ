@@ -16,7 +16,7 @@ import gc
 from sklearn.cluster.hierarchical import AgglomerativeClustering
 
 
-g_dConvergenceThresold = 0.5
+g_dConvergenceThresold = 1
 g_gamma0 = 0.01
 g_power_t = 0.25
 
@@ -183,6 +183,17 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
     mu = np.reshape(mu, (mu.shape[0], 1) )
     mu[np.isnan(mu)] = 0.0
     
+    # multiply by scale parameter
+#     nMaxDim_alpha = max(weightR_train.sum(), weightD_train.sum(), weightS_train.sum() )
+#     arrAlphas[0] = arrAlphas[0] * (nMaxDim_alpha *1.0 / weightR_train.sum() )
+#     arrAlphas[1] = arrAlphas[1] * (nMaxDim_alpha *1.0 / weightD_train.sum() )
+#     arrAlphas[2] = arrAlphas[2] * (nMaxDim_alpha *1.0 / weightS_train.sum() )
+    
+#     nMaxDim_lambda = max(U.shape[0]*U.shape[1], V.shape[0]*V.shape[1], P.shape[0]*P.shape[1], Q.shape[0]*Q.shape[1])
+#     arrLambdas[0] = arrLambdas[0] * (nMaxDim_lambda *1.0 / (U.shape[0]*U.shape[1]) )
+#     arrLambdas[1] = arrLambdas[1] * (nMaxDim_lambda *1.0 / (P.shape[0]*P.shape[1]) )
+#     arrLambdas[2] = arrLambdas[2] * (nMaxDim_lambda *1.0 / (Q.shape[0]*Q.shape[1]) )
+    
     #===========================================================================
     # iterate until converge or max steps
     #===========================================================================
@@ -234,7 +245,7 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         dNextRmseD = None
         dNextRmseS = None
         dNextLoss = None
-        gamma = 0.1
+        gamma = 0.01
         while(True):
             # U
             nextU = currentU - gamma*gradU
@@ -297,6 +308,8 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
             break
         
         else: # loss decreases, but is not converged, do nothing
+            if(bDebugInfo):
+                print("    change: %f" % dChange)
             pass 
         
     #END step
@@ -439,8 +452,9 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
                     mtR_merged - reduced R matrix, NAN for missing values
                     mtS_merged - reduced S matrix, no more missing value
         Note:
-                    this function should be called after R,D,S are normalized
-                    and missing values are also filled
+                    this function should be called after D,S are normalized
+                    and missing values are also filled, but before filling 
+                    the missing values of R.
     '''
     #===========================================================================
     # clustering
@@ -483,8 +497,8 @@ if __name__ == '__main__':
     mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
     
     # setup
-    arrAlphas = np.array([1, 0.5, 0.1])
-    arrLambdas = np.array([5.0, 5.0, 5.0])
+    arrAlphas = np.array([6, 20, 0.2])
+    arrLambdas = np.array([20.0, 1.0, 1.0])
     f = 5
     nMaxStep = 300
     nFold = 10
@@ -501,7 +515,7 @@ if __name__ == '__main__':
                                                   weightR_reduced, weightD_reduced, weightS_reduced, \
                                                   arrAlphas, arrLambdas, \
                                                   f, nMaxStep, nFold, \
-                                                  bDebugInfo=False)
+                                                  bDebugInfo=True)
     # visualize
     visualizeRMSETrend(lsBestTrainingRMSEs)
     

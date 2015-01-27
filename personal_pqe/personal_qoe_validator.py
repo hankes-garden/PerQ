@@ -333,11 +333,11 @@ def validateOnNJ(strInPath, strOutPath, bSerialize=False):
     return dcModels, dfVariableImportance.T
 
 
-def visualizeVariableImportance(dfVariableImportance):
+def visualizeVariableImportance(dfVariableImportance, **kwargs):
     
     # create single plot in a figure
     ax0 = plt.figure().add_subplot(111) # note it is figure(), not Figure()!
-    axDraw = dfVariableImportance.plot(ax=ax0, ls='--')
+    axDraw = dfVariableImportance.plot(ax=ax0, **kwargs)
     
     # set line for all user
     lines = axDraw.get_lines()

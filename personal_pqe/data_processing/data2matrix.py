@@ -588,8 +588,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, 
 #     lsColumns2Delete_user = ['free_call_dur','roam_call_minutes']
 #     dcColumns2Discretize_user = {}
 #     lsColumns2Vectorize_user = ['town_id', 'sale_id', 'product_id']
-    lsColumns2Delete_user = ['last_mon_web_user_hit_cnt', 'ov_up_pptv_flag', \
-                             'ov_up_sohuvidio_flag', 'ov_up_sohuvidio_hq_flag']
+    lsColumns2Delete_user = []
     dcColumns2Discretize_user = {}
     lsColumns2Vectorize_user = []
     
@@ -970,7 +969,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                          set(dfData_user[strIDColumnName_user].tolist())    \
                          & set(dfData_video[strIDColumnName_user].tolist()) \
                          )
-    
+    nCommonUser = len(lsCommonUsers)
     print("-->%d users co-exist in both user and video data set." % len(lsCommonUsers) )
     
     if (lsUser2Select is not None):
@@ -1071,7 +1070,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     del dfX[strLabelColumnName]
     del dfX[strIDColumnName_user]
     del dfX[strIDColumnName_video]
-    nVideoFeatureEnd = dfData_video.shape[1] - 3 + 1
+    nVideoFeatureEnd = dfData_video.shape[1] - 3
     
     
     if(bOnlyXY is False):
@@ -1134,7 +1133,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     
         print("Congratulations! transformation of R,D,S,X,Y is finished.")
         
-        return dfR, dfD, dfS, dfX, srY, nVideoFeatureEnd
+        return dfR, dfD, dfS, dfX, srY, nVideoFeatureEnd, nCommonUser
     else:
         print("Congratulations! transformation of X,Y is finished.")
-        return dfX, srY, nVideoFeatureEnd
+        return dfX, srY, nVideoFeatureEnd, nCommonUser

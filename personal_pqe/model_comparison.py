@@ -13,6 +13,7 @@ import sklearn.preprocessing as prepro
 from sklearn import cross_validation
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
 import math
 
 def transformMatrices2FlatTable(strRPath, strDPath, strSPath):
@@ -68,37 +69,26 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10, lsFeatureNames=N
         dcCurFold = {}
         # setup model
         model = None
-        if (strModelName == 'GBRT'):
-            
-            # fill nan
-            arrX[np.isnan(arrX)] = 0.0
-            
-            # normalize features
-            min_max_scaler = prepro.MinMaxScaler(copy=False)
-            arrX = min_max_scaler.fit_transform(arrX)
         
+        if (strModelName == 'GBRT'):
             if dcModelParams is not None:
                 model = GradientBoostingRegressor(**dcModelParams)
             else:
                 model = GradientBoostingRegressor()
             
         elif (strModelName == 'decision_tree_regression'):
-            # fill nan
-            arrX[np.isnan(arrX)] = 0.0
-            
-            # normalize features
-            min_max_scaler = prepro.MinMaxScaler(copy=False)
-            arrX = min_max_scaler.fit_transform(arrX)
-            
             if dcModelParams is not None:
                 model = DecisionTreeRegressor(**dcModelParams)
             else:
                 model = DecisionTreeRegressor()
                 
+        elif (strModelName == 'random_forest_regression'):
+            if dcModelParams is not None:
+                model = RandomForestRegressor(**dcModelParams)
+            else:
+                model = RandomForestRegressor()
+                
         elif (strModelName == 'linear_regression'):
-            # fill nan
-            arrX[np.isnan(arrX)] = 0.0
-            
             if dcModelParams is not None:
                 model = LinearRegression(**dcModelParams)
             else:
@@ -106,6 +96,13 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10, lsFeatureNames=N
         else:
             print 'unsupported baseline!'
             break
+        
+        # fill nan
+        arrX[np.isnan(arrX)] = 0.0
+            
+        # normalize features
+        min_max_scaler = prepro.MinMaxScaler(copy=False)
+        arrX = min_max_scaler.fit_transform(arrX)
         
         # split data
         arrX_train, arrX_test = arrX[arrTrainIndex], arrX[arrTestIndex]
@@ -139,14 +136,10 @@ if __name__ == '__main__':
     #===========================================================================
     # load data
     #===========================================================================
-    strRPath = 'd:\\playground\\personal_qoe\\sh\\R_no_discretize_top100.npy'
-    strDPath = 'd:\\playground\\personal_qoe\\sh\\D_no_discretize_top100.npy'
-    strSPath = 'd:\\playground\\personal_qoe\\sh\\S_no_discretize_top100.npy'
+    strmtXPath = 'd:\\playground\\personal_qoe\\data\\sh\\mtX_0discre_rand1000.npy'
+    strarrYPath = 'd:\\playground\\personal_qoe\\data\\sh\\arrY_0discre_rand1000.npy'
     
-    strmtXPath = 'd:\\playground\\personal_qoe\\sh\\mtX_0discre_top100.npy'
-    strarrYPath = 'd:\\playground\\personal_qoe\\sh\\arrY_0discre_top100.npy'
-    
-    strdfXPath = 'd:\\playground\\personal_qoe\\sh\\dfX_0discre_rand1000'
+    strdfXPath = 'd:\\playground\\personal_qoe\\data\\sh\\dfX_0discre_rand1000'
 
     mtX = np.load(strmtXPath)
     arrY = np.load(strarrYPath)
@@ -155,11 +148,14 @@ if __name__ == '__main__':
     #===========================================================================
     # model setup
     #===========================================================================
-    strModelName = 'GBRT'
-    modelParams = {'n_estimators':100} 
+#     strModelName = 'GBRT'
+#     modelParams = {'n_estimators':100} 
     
-#     strModelName = 'decision_tree_regression'
-#     modelParams = {'max_depth':4}
+#     strModelName = 'random_forest_regression'
+#     modelParams = {'n_estimators':50} 
+    
+    strModelName = 'decision_tree_regression'
+    modelParams = {'max_depth':4}
 
 #     strModelName = 'linear_regression'
 #     modelParams = {'normalize':False}
@@ -168,7 +164,7 @@ if __name__ == '__main__':
     # test
     #===========================================================================
     nFold = 10
-    dcResults = baseline(mtX, arrY, strModelName, modelParams, nFold, lsFeatureNames=None)
+    dcResults = baseline(mtX, arrY, strModelName, modelParams, nFold, lsFeatureNames=dfX.columns.tolist())
     
     #===========================================================================
     # output
