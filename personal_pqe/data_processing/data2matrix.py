@@ -476,7 +476,7 @@ def transformNJData(strDataPath):
     return R, D, S
 
 
-def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, lsUser2Select=None, bOnlyXY=False):
+def transformSHData(strUserFilePath, strVideoFilePath, dUserSamplingRatio=1.0, bTop=False, lsUser2Select=None, bOnlyXY=False):
     '''
         This function transform shanghai data set to R, S, D matrices.
         Namely, this function does the following tasks:
@@ -488,7 +488,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, 
         params:
                 strUserFilePath - user data file path
                 strVideoFilePath - video data file path
-                nTotalUser2Sample - total number of user to sample
+                dUserSamplingRatio - total number of user to sample
                 bTop - sample top N users
                 lsUser2Select - specify user to select manually
         
@@ -621,7 +621,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, nTotalUser2Sample, bTop, 
                               lsColumns2Delete_user, dcColumns2Discretize_user, lsColumns2Vectorize_user, \
                               dfData_video, strIDColumnName_video, \
                               lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
-                              strLabelColumnName, nTotalUser2Sample, bTop, lsUser2Select,\
+                              strLabelColumnName, dUserSamplingRatio, bTop, lsUser2Select,\
                               bOnlyXY)
     
 
@@ -916,7 +916,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                        dfData_video, strIDColumnName_video, \
                        lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
                        strLabelColumnName, \
-                       nTotalUser2Sample, bTop, lsUser2Select=None, bOnlyXY=False):
+                       dUserSamplingRatio, bTop, lsUser2Select=None, bOnlyXY=False):
     '''
         Given two data frames which contains user feature and video feature data, this function 
         transform them to R, D, S matrices.
@@ -934,13 +934,15 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                 lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
                 strLabelColumnName,
 
-                nTotalUser2Sample - total number of user to sample
+                dUserSamplingRatio - percentage of user to sample
                 bTop - sample top N users
                 lsUser2Select - specify user to select manually
                 
         returns:
                 R, D, S - matrix which use np.nan to represent missing values
     '''
+    
+    dcTrace = {}
     
     #===========================================================================
     # filter out invalid tuples
@@ -955,6 +957,8 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     dfData_user = dfData_user[lsMasks_user]
     dfData_video = dfData_video[lsMasks_video]
     
+    dcTrace['nOriginalUser_user'] = len(dfData_user[strIDColumnName_user].unique() )
+    dcTrace['nOriginalUser_video'] = len(dfData_video[strIDColumnName_user].unique() )
     print("-->valid data size: %d users, %d records" % (len(dfData_user), len(dfData_video) ) )
     
     #===========================================================================
@@ -969,7 +973,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                          set(dfData_user[strIDColumnName_user].tolist())    \
                          & set(dfData_video[strIDColumnName_user].tolist()) \
                          )
-    nCommonUser = len(lsCommonUsers)
+    dcTrace['nCommonUser'] = len(lsCommonUsers)
     print("-->%d users co-exist in both user and video data set." % len(lsCommonUsers) )
     
     if (lsUser2Select is not None):
@@ -983,18 +987,21 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     #===========================================================================
     # sample records
     #===========================================================================
-    if (nTotalUser2Sample is not None):
+    if (dUserSamplingRatio < 1.0):
+        nUser2Sample = int(len(lsCommonUsers) * dUserSamplingRatio)
         lsUser2Sample = None
         if (bTop):
             srUserRank = dfData_video[strIDColumnName_user].value_counts(sort=True, ascending=False)
-            lsUser2Sample = (srUserRank.index.tolist())[:nTotalUser2Sample]
+            lsUser2Sample = (srUserRank.index.tolist())[:nUser2Sample]
         else:
-            lsUser2Sample = random.sample(dfData_video[strIDColumnName_user].unique(), nTotalUser2Sample)
+            lsUser2Sample = random.sample(dfData_video[strIDColumnName_user].unique(), nUser2Sample)
         
         # only use tuples of these selected users
-        print('start to sample %d from %s users....' % (nTotalUser2Sample, ('top' if bTop else 'random') ) )
+        print('start to sample %d from %s users....' % (nUser2Sample, ('top' if bTop else 'random') ) )
         dfData_user = dfData_user[ dfData_user[strIDColumnName_user].isin(lsUser2Sample) ]
         dfData_video = dfData_video[ dfData_video[strIDColumnName_user].isin(lsUser2Sample) ]
+    
+    dcTrace['nFinalUser'] = len(dfData_video[strIDColumnName_user].unique() )
     
     #===========================================================================
     # delete useless columns
@@ -1071,8 +1078,11 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
     del dfX[strIDColumnName_user]
     del dfX[strIDColumnName_video]
     nVideoFeatureEnd = dfData_video.shape[1] - 3
+    dcTrace['nVideoFeatureEnd'] = nVideoFeatureEnd
     
-    
+    dfR = None
+    dfD = None
+    dfS = None
     if(bOnlyXY is False):
         #===========================================================================
         # transfrom into D (still include userID for now)
@@ -1130,10 +1140,6 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
         # sort R
         dfR = dfR[lsVideoOrder]
         dfR = dfR.reindex(lsUserOrder)
-    
-        print("Congratulations! transformation of R,D,S,X,Y is finished.")
-        
-        return dfR, dfD, dfS, dfX, srY, nVideoFeatureEnd, nCommonUser
-    else:
-        print("Congratulations! transformation of X,Y is finished.")
-        return dfX, srY, nVideoFeatureEnd, nCommonUser
+
+    print("Congratulations! transformation is finished.")
+    return dfR, dfD, dfS, dfX, srY, nVideoFeatureEnd, dcTrace
