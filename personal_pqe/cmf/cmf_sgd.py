@@ -188,7 +188,7 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
 #     arrAlphas[0] = arrAlphas[0] * (nMaxDim_alpha *1.0 / weightR_train.sum() )
 #     arrAlphas[1] = arrAlphas[1] * (nMaxDim_alpha *1.0 / weightD_train.sum() )
 #     arrAlphas[2] = arrAlphas[2] * (nMaxDim_alpha *1.0 / weightS_train.sum() )
-    
+#     
 #     nMaxDim_lambda = max(U.shape[0]*U.shape[1], V.shape[0]*V.shape[1], P.shape[0]*P.shape[1], Q.shape[0]*Q.shape[1])
 #     arrLambdas[0] = arrLambdas[0] * (nMaxDim_lambda *1.0 / (U.shape[0]*U.shape[1]) )
 #     arrLambdas[1] = arrLambdas[1] * (nMaxDim_lambda *1.0 / (P.shape[0]*P.shape[1]) )
@@ -245,7 +245,7 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         dNextRmseD = None
         dNextRmseS = None
         dNextLoss = None
-        gamma = 0.01
+        gamma = 0.1
         while(True):
             # U
             nextU = currentU - gamma*gradU
@@ -492,13 +492,13 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
     
 if __name__ == '__main__':
     # load data
-    mtR = np.load('d:\\playground\\personal_qoe\\sh\\mtR_0discre_top100.npy')
-    mtD = np.load('d:\\playground\\personal_qoe\\sh\\mtD_0discre_top100.npy')
-    mtS = np.load('d:\\playground\\personal_qoe\\sh\\mtS_0discre_top100.npy')
+    mtR = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtR_0discre_top100.npy')
+    mtD = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtD_0discre_top100.npy')
+    mtS = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtS_0discre_top100.npy')
     
     # setup
-    arrAlphas = np.array([6, 20, 0.2])
-    arrLambdas = np.array([20.0, 1.0, 1.0])
+    arrAlphas = np.array([0.008, 0.001, 0.001])
+    arrLambdas = np.array([1.0, 1.0, 1.0])
     f = 5
     nMaxStep = 300
     nFold = 10

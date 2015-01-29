@@ -476,7 +476,9 @@ def transformNJData(strDataPath):
     return R, D, S
 
 
-def transformSHData(strUserFilePath, strVideoFilePath, dUserSamplingRatio=1.0, bTop=False, lsUser2Select=None, bOnlyXY=False):
+def transformSHData(strUserFilePath, strVideoFilePath, dUserSamplingRatio=1.0, \
+                    bTop=False, lsUser2Select=None, bOnlyXY=False, \
+                    bFilterInvalid=True):
     '''
         This function transform shanghai data set to R, S, D matrices.
         Namely, this function does the following tasks:
@@ -622,7 +624,7 @@ def transformSHData(strUserFilePath, strVideoFilePath, dUserSamplingRatio=1.0, b
                               dfData_video, strIDColumnName_video, \
                               lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
                               strLabelColumnName, dUserSamplingRatio, bTop, lsUser2Select,\
-                              bOnlyXY)
+                              bOnlyXY, bFilterInvalid)
     
 
 def transform2mt(dfData_user, strIDColumnName_user, \
@@ -916,7 +918,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                        dfData_video, strIDColumnName_video, \
                        lsColumns2Delete_video, dcColumns2Discretize_video, lsColumns2Vectorize_video, \
                        strLabelColumnName, \
-                       dUserSamplingRatio, bTop, lsUser2Select=None, bOnlyXY=False):
+                       dUserSamplingRatio, bTop, lsUser2Select=None, bOnlyXY=False, bFilterInvalid=True):
     '''
         Given two data frames which contains user feature and video feature data, this function 
         transform them to R, D, S matrices.
@@ -953,6 +955,10 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
                      & (~dfData_video['streaming_dw_packets'].isnull() ) \
                      & (~dfData_video['streaming_filesize'].isnull() ) \
                      & (dfData_video['streaming_dw_packets']<=dfData_video['streaming_filesize'])
+                     
+    if (bFilterInvalid is True):
+        lsMasks_video = lsMasks_video \
+                        & ( dfData_video['streaming_filesize']>=(10.0*1024.0*1024.0) )
                      
     dfData_user = dfData_user[lsMasks_user]
     dfData_video = dfData_video[lsMasks_video]
@@ -1002,6 +1008,7 @@ def transform2Matrices(dfData_user, strIDColumnName_user, \
         dfData_video = dfData_video[ dfData_video[strIDColumnName_user].isin(lsUser2Sample) ]
     
     dcTrace['nFinalUser'] = len(dfData_video[strIDColumnName_user].unique() )
+    
     
     #===========================================================================
     # delete useless columns
