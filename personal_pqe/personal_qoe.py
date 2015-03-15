@@ -9,9 +9,10 @@ import numpy as np
 import cmf.cmf_sgd as cmf
 import pandas as pd
 
+
 def multipleTrial(strRPath, strDPath, strSPath, \
 				  lsParamSets, strParamName, \
-                  arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio):
+                  arrAlphas_scaled, arrLambdas_scaled, f, dLearningRate, nMaxStep, dTestRatio):
     #===========================================================================
     # load data & transform into matrix
     #===========================================================================
@@ -27,9 +28,9 @@ def multipleTrial(strRPath, strDPath, strSPath, \
         # prepare params 
         #======================================================================
         if (strParamName == 'alpha'):
-            arrAlphas = lsParamSets[i]
+            arrAlphas_scaled = lsParamSets[i]
         elif (strParamName == 'lambda'):
-            arrLambdas = lsParamSets[i] 
+            arrLambdas_scaled = lsParamSets[i] 
         elif (strParamName == 'f'):
             f = lsParamSets[i]
         else:
@@ -40,22 +41,22 @@ def multipleTrial(strRPath, strDPath, strSPath, \
         # trial
         #======================================================================
         print("------------------------")
-        print "arrAlphas", arrAlphas
-        print 'arrlambdas', arrLambdas
+        print "arrAlphas_scaled", arrAlphas_scaled
+        print 'arrlambdas', arrLambdas_scaled
         print 'f', f
         
-        dcFoldResults, lsBestTrainingTrace  = cmf.crossValidate(mtR, mtD, mtS, arrAlphas, arrLambdas, f, nMaxStep, nFold=5)
+        dcFoldResults, lsBestTrainingTrace  = cmf.crossValidate(mtR, mtD, mtS, arrAlphas_scaled, arrLambdas_scaled, f, nMaxStep, nFold=5)
         
     
         lsTestRMSE = [v['test'] for v in dcFoldResults.values() ]
         dMin = np.min(lsTestRMSE)
         dMax = np.max(lsTestRMSE)
         dMean = np.mean(lsTestRMSE)
-        dStd = np.std(lsTestRMSE)
-        print('-->min=%f, max=%f, mean=%f, std=%f' % (dMin, dMax, dMean, dStd))
+        dStd_rmse = np.std(lsTestRMSE)
+        print('-->min=%f, max=%f, mean=%f, std=%f' % (dMin, dMax, dMean, dStd_rmse))
         
         strKey = strParamName + " = " + str(lsParamSets)
-        dcResults[strKey] = {'min':dMin, 'max':dMax, 'mean': dMean, 'std':dStd }
+        dcResults[strKey] = {'min':dMin, 'max':dMax, 'mean': dMean, 'std':dStd_rmse }
             
         
     print("%d trials have been finished" % nTrials)
@@ -66,8 +67,8 @@ def findBestLambda(strRPath, strDPath, strSPath):
     #===========================================================================
     # initial params
     #===========================================================================
-    arrAlphas = np.array([0.8,0.1,0.1]) 
-    arrLambdas = np.array([0.4,0.3,0.3])
+    arrAlphas_scaled = np.array([0.8,0.1,0.1]) 
+    arrLambdas_scaled = np.array([0.4,0.3,0.3])
     f = 20
     dLearningRate = 0.0001
     dTestRatio = 0.3
@@ -90,7 +91,7 @@ def findBestLambda(strRPath, strDPath, strSPath):
     #===========================================================================
     dcResult = multipleTrial(strRPath, strDPath, strSPath, \
                              lsParamSets, strParamName, \
-                             arrAlphas, arrLambdas, \
+                             arrAlphas_scaled, arrLambdas_scaled, \
                              f, dLearningRate, nMaxStep, dTestRatio)
     
     return dcResult
@@ -99,8 +100,8 @@ def findBestAlpha(strRPath, strDPath, strSPath):
     #===========================================================================
     # initial params
     #===========================================================================
-    arrAlphas = np.array([0.8,0.1,0.1]) 
-    arrLambdas = np.array([2,2,2])
+    arrAlphas_scaled = np.array([0.8, 0.1, 0.1]) 
+    arrLambdas_scaled = np.array([0.5, 2.0, 2.0])
     f = 20
     dLearningRate = 0.0001
     dTestRatio = 0.3
@@ -122,7 +123,7 @@ def findBestAlpha(strRPath, strDPath, strSPath):
     #===========================================================================
     # test different settings    
     #===========================================================================
-    dcResult = multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAlphas, arrLambdas, f, dLearningRate, nMaxStep, dTestRatio)
+    dcResult = multipleTrial(strRPath, strDPath, strSPath, lsParamSets, strParamName, arrAlphas_scaled, arrLambdas_scaled, f, dLearningRate, nMaxStep, dTestRatio)
     
     return dcResult
         

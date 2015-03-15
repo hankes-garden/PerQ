@@ -9,6 +9,7 @@ import pandas as pd
 
 from sklearn.ensemble import GradientBoostingRegressor 
 from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 import sklearn.preprocessing as prepro
 from sklearn import cross_validation
 from sklearn.tree import DecisionTreeRegressor
@@ -115,6 +116,8 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10, lsFeatureNames=N
         arrY_pred = model.predict(arrX_test)
         
         rmse = math.sqrt(mean_squared_error(arrY_test, arrY_pred))
+        mae = mean_absolute_error(arrY_test, arrY_pred)
+        r2 = model.score(arrX_test, arrY_test)
         
         lsFeatureImportance = None
         if (lsFeatureNames is not None):
@@ -122,9 +125,10 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10, lsFeatureNames=N
             lsFeatureImportance = zip(lsFeatureNames, model.feature_importances_)
             
         dcCurFold['rmse'] = rmse
+        dcCurFold['mae'] = mae
         dcCurFold['feature_importance'] = lsFeatureImportance
         
-        print('-->%d fold cross validation: rmse=%f' % (i, rmse) )
+        print('-->%d fold cross validation: rmse=%f, mae=%f, r2=%f' % (i, rmse, mae, r2) )
         
         dcResults[i] = dcCurFold
         i = i+1
@@ -140,22 +144,36 @@ if __name__ == '__main__':
     strarrYPath = 'd:\\playground\\personal_qoe\\data\\sh\\arrY_0discre_rand1000.npy'
     
     strdfXPath = 'd:\\playground\\personal_qoe\\data\\sh\\dfX_0discre_rand1000'
+    strsrYPath = 'd:\\playground\\personal_qoe\\data\\sh\\srY_0discre_rand1000'
 
     mtX = np.load(strmtXPath)
     arrY = np.load(strarrYPath)
     dfX = pd.read_pickle(strdfXPath)
+    srY = pd.read_pickle(strsrYPath)
+    srY.index = range(len(srY))
+    dfAll = dfX.copy()
+    dfAll['ratio'] = srY
     
+    # filter out small videos
+    dfAll = dfAll[dfAll['ratio'] >= 0.1]
+        
+    arrY = dfAll['ratio'].as_matrix()
+    del dfAll['ratio']
+    mtX = dfAll.as_matrix()
+     
     #===========================================================================
     # model setup
     #===========================================================================
-#     strModelName = 'GBRT'
-#     modelParams = {'n_estimators':100} 
+    strModelName = 'GBRT'
+    modelParams = {'n_estimators':100} 
     
 #     strModelName = 'random_forest_regression'
 #     modelParams = {'n_estimators':50} 
     
-    strModelName = 'decision_tree_regression'
-    modelParams = {'max_depth':4}
+#     strModelName = 'decision_tree_regression'
+#     modelParams = {'max_depth':4}
+#     modelParams = None
+    
 
 #     strModelName = 'linear_regression'
 #     modelParams = {'normalize':False}
@@ -163,6 +181,9 @@ if __name__ == '__main__':
     #===========================================================================
     # test
     #===========================================================================
+    print "modelName=", strModelName
+    print "mtX.shape=", mtX.shape
+    
     nFold = 10
     dcResults = baseline(mtX, arrY, strModelName, modelParams, nFold, lsFeatureNames=dfX.columns.tolist())
     
@@ -170,10 +191,17 @@ if __name__ == '__main__':
     # output
     #===========================================================================
     lsRMSEs = [i['rmse'] for i in dcResults.values()]
-    dBestScore = np.min(lsRMSEs)
-    dMeanScore = np.mean(lsRMSEs)
-    dStd = np.std(lsRMSEs )
-    print("cross validation is finished. \n--> best=%f, mean=%f, std=%f." % (dBestScore, dMeanScore, dStd ) )
+    dBestScore_rmse = np.min(lsRMSEs)
+    dMeanScore_rmse = np.mean(lsRMSEs)
+    dStd_rmse = np.std(lsRMSEs )
+    
+    lsMAEs = [i['mae'] for i in dcResults.values()]
+    dBestScore_mae = np.min(lsMAEs)
+    dMeanScore_mae = np.mean(lsMAEs)
+    dStd_mae = np.std(lsMAEs)
+    print("cross validation is finished.")
+    print ("-->RMSE: best=%f, mean=%f, std=%f." % (dBestScore_rmse, dMeanScore_rmse, dStd_rmse) )
+    print ("-->MAE: best=%f, mean=%f, std=%f." % (dBestScore_mae, dMeanScore_mae, dStd_mae) )
     
     #===========================================================================
     # feature importance
@@ -187,5 +215,5 @@ if __name__ == '__main__':
             
             srFeatureImportance.sort(ascending=False)
 
-            print("----fold%d: rmse=%f----" % (k, v['rmse']))
-            print srFeatureImportance.iloc[:10]
+#             print("----fold%d: rmse=%f----" % (k, v['rmse']))
+#             print srFeatureImportance.iloc[:10]

@@ -12,12 +12,12 @@ import numpy as np
 import pandas as pd
 import sklearn.preprocessing as prepro
 from sklearn import cross_validation
-import gc
 from sklearn.cluster.hierarchical import AgglomerativeClustering
+from sklearn import metrics
 
 
-g_dConvergenceThresold = 1
-g_gamma0 = 0.01
+g_dConvergenceThresold = 0.05
+g_gamma0 = 0.1
 g_power_t = 0.25
 
 
@@ -32,28 +32,27 @@ def getLearningRate(gamma, nIter):
 
 #     return np.log2(nIter+1) / (nIter+1.0) # set to log(n)/n
 
-def computeResidualError(R, D, S, U, V, P, Q, mu, \
+def computeResidualError(R, D, S, U, V, P, Q, bu, mu, \
                          weightR_train, weightR_test, weightD_train, weightS_train, \
                          arrAlphas, arrLambdas):
     #===========================================================================
     # compute initial error
     #===========================================================================
-    # compute error in R (R = mu + U·V^T )
-    # predR =  (np.dot(U, V.T) + bu + bv ) + mu # use broadcast to add on each row/column
-    predR =  np.dot(U, V.T) + mu
+    # compute error in R (R = bu + U·V^T )
+    predR =  np.dot(U, V.T) + bu + mu
+#     predR =  np.dot(U, V.T)
     _errorR = np.subtract(R, predR)
     errorR_train = np.multiply(weightR_train, _errorR)
     
     # compute test error in R
     errorR_test = np.multiply(weightR_test, _errorR)
     
-    
-    # compute error in normD
+    # compute error in D
     predD = np.dot(U, P.T)
     _errorD = np.subtract(D, predD)
     errorD_train = np.multiply(weightD_train, _errorD)
     
-    # compute error in normS
+    # compute error in S
     predS = np.dot(V, Q.T)
     _errorS = np.subtract(S, predS)
     errorS_train = np.multiply(weightS_train, _errorS)
@@ -74,18 +73,18 @@ def computeResidualError(R, D, S, U, V, P, Q, mu, \
             
     return errorR_train, errorD_train, errorS_train, rmseR_train, rmseR_test, rmseD_train, rmseS_train, dTotalLost
 
-def computeParitialGraident(errorR, errorD, errorS, U, V, P, Q, arrAlphas, arrLambdas):
+def computeParitialGraident(errorR, errorD, errorS, U, V, P, Q, arrAlphas_scaled, arrLambdas_scaled):
     # U
-    gradU = ( -1.0*arrAlphas[0]*np.dot(errorR, V) - arrAlphas[1]*np.dot(errorD, P) \
-                      + arrLambdas[0]*U )
+    gradU = ( -1.0*arrAlphas_scaled[0]*np.dot(errorR, V) - arrAlphas_scaled[1]*np.dot(errorD, P) \
+                      + arrLambdas_scaled[0]*U )
     # P
-    gradP = ( -1.0*arrAlphas[1]*np.dot(errorD.T, U) + arrLambdas[1]*P )
+    gradP = ( -1.0*arrAlphas_scaled[1]*np.dot(errorD.T, U) + arrLambdas_scaled[1]*P )
     
     # V
-    gradV = ( -1.0*arrAlphas[0]*np.dot(errorR.T, U) - arrAlphas[2]*np.dot(errorS, Q) \
-                      + arrLambdas[0]*V )
+    gradV = ( -1.0*arrAlphas_scaled[0]*np.dot(errorR.T, U) - arrAlphas_scaled[2]*np.dot(errorS, Q) \
+                      + arrLambdas_scaled[0]*V )
     # Q
-    gradQ = ( -1.0 * arrAlphas[2]*np.dot(errorS.T, V) + arrLambdas[2]*Q )
+    gradQ = ( -1.0 * arrAlphas_scaled[2]*np.dot(errorS.T, V) + arrLambdas_scaled[2]*Q )
     
     return gradU, gradV, gradP, gradQ
 
@@ -100,8 +99,11 @@ def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.7
         5. reduce dimension of R and S 
            
         Note:
-                if inplace=True, then the content of mtR, mtD, mtS will
-                be modified (e.g., fill missing value with 0)
+                1. if inplace=True, then the content of mtR, mtD, mtS will
+                be modified (e.g., fill missing value with 0).
+                2. in the returns of this function, zero is used for missing
+                value, no more Nan
+                
     '''
     
     #===========================================================================
@@ -152,7 +154,8 @@ def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.7
         R, S = reduceVideoDimension(R, S, int(S.shape[0]*dReductionRatio))
         
     # get weight matrix
-    weightR = np.where(np.isnan(R), 0.0, 1.0) 
+    arrMaskR = (np.isnan(R))
+    weightR = np.where(arrMaskR, 0.0, 1.0) 
     weightS = np.where(np.isnan(S), 0.0, 1.0)
     
     
@@ -178,21 +181,29 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
     V = np.random.rand(S.shape[0], f)
     Q = np.random.rand(S.shape[1], f)
     
-    # compute mu ( for mean normalization), must be calculated after masking test data
-    mu = ( (R*weightR_train).sum(axis=1)*1.0) / weightR_train.sum(axis=1)
-    mu = np.reshape(mu, (mu.shape[0], 1) )
-    mu[np.isnan(mu)] = 0.0
+    # compute mu, must be calculated after masking test data
+    mu = ( (R*weightR_train).sum()*1.0) / weightR_train.sum()
     
-    # multiply by scale parameter
-#     nMaxDim_alpha = max(weightR_train.sum(), weightD_train.sum(), weightS_train.sum() )
-#     arrAlphas[0] = arrAlphas[0] * (nMaxDim_alpha *1.0 / weightR_train.sum() )
-#     arrAlphas[1] = arrAlphas[1] * (nMaxDim_alpha *1.0 / weightD_train.sum() )
-#     arrAlphas[2] = arrAlphas[2] * (nMaxDim_alpha *1.0 / weightS_train.sum() )
-#     
-#     nMaxDim_lambda = max(U.shape[0]*U.shape[1], V.shape[0]*V.shape[1], P.shape[0]*P.shape[1], Q.shape[0]*Q.shape[1])
-#     arrLambdas[0] = arrLambdas[0] * (nMaxDim_lambda *1.0 / (U.shape[0]*U.shape[1]) )
-#     arrLambdas[1] = arrLambdas[1] * (nMaxDim_lambda *1.0 / (P.shape[0]*P.shape[1]) )
-#     arrLambdas[2] = arrLambdas[2] * (nMaxDim_lambda *1.0 / (Q.shape[0]*Q.shape[1]) )
+    # compute bu ( for mean normalization), must be calculated after masking test data
+    # bu will only be computed if there are more than 2 tuples in the records of this user
+    bu = np.where(weightR_train.sum(axis=1)>=3.0, ( ( (R-mu)*weightR_train).sum(axis=1)*1.0) / weightR_train.sum(axis=1), 0.0)
+    bu = np.reshape(bu, (bu.shape[0], 1) )
+    bu[np.isnan(bu)] = 0.0
+    
+    dScale = 1000.0
+    arrAlphas_scaled = arrAlphas.copy()
+    arrAlphas_scaled[0] = dScale * arrAlphas_scaled[0] / weightR_train.sum()
+    arrAlphas_scaled[1] = dScale * arrAlphas_scaled[1] / weightD_train.sum()
+    arrAlphas_scaled[2] = dScale * arrAlphas_scaled[2] / weightS_train.sum()
+    
+    # lambda will be tuned more easily if we do not scale it.
+    arrLambdas_scaled = arrLambdas.copy()
+#     arrLambdas_scaled[0] = dScale * arrLambdas_scaled[0] / min( (U.shape[0]*U.shape[1]), (V.shape[0]*V.shape[1]) )
+#     arrLambdas_scaled[1] = dScale * arrLambdas_scaled[1] / (P.shape[0] * P.shape[1])
+#     arrLambdas_scaled[2] = dScale * arrLambdas_scaled[2] / (Q.shape[0] * Q.shape[1])
+    
+    print "arrAlphas_scaled = ", arrAlphas_scaled
+    print "arrLambdas_scaled = ", arrLambdas_scaled
     
     #===========================================================================
     # iterate until converge or max steps
@@ -206,15 +217,15 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         
         # compute error
         mtCurrentErrorR, mtCurrentErrorD, mtCurrentErrorS, \
-        dCurrentRmseR, dCurrentRmseR_test, dCurrentRmseD, dCurrentRmseS, \
-        dCurrentLoss = computeResidualError(R, D, S, currentU, currentV, currentP, currentQ, mu, \
+        dCurrentRmseR_train, dCurrentRmseR_test, dCurrentRmseD, dCurrentRmseS, \
+        dCurrentLoss = computeResidualError(R, D, S, currentU, currentV, currentP, currentQ, bu, mu, \
                                             weightR_train, weightR_test, weightD_train, weightS_train, \
-                                            arrAlphas, arrLambdas)
+                                            arrAlphas_scaled, arrLambdas_scaled)
         
         # save RMSE
         if (lsTrainingTrace is not None):
             dcRMSE = {}
-            dcRMSE['rmseR'] = dCurrentRmseR
+            dcRMSE['rmseR'] = dCurrentRmseR_train
             dcRMSE['rmseR_test'] = dCurrentRmseR_test
             dcRMSE['rmseD'] = dCurrentRmseD
             dcRMSE['rmseS'] = dCurrentRmseS
@@ -225,7 +236,7 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         if (bDebugInfo):
             print("------------------------------")
             print("step %d" % (nStep) )
-            print("    RMSE(R) = %f" % dCurrentRmseR )
+            print("    RMSE(R) = %f" % dCurrentRmseR_train )
             print("    RMSE(R)_test = %f" % dCurrentRmseR_test )
             print("    RMSE(D) = %f" % dCurrentRmseD )
             print("    RMSE(S) = %f" % dCurrentRmseS )
@@ -235,17 +246,17 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         # compute partial gradient
         gradU, gradV, gradP, gradQ = \
             computeParitialGraident(mtCurrentErrorR, mtCurrentErrorD, mtCurrentErrorS, \
-                                    currentU, currentV, currentP, currentQ, arrAlphas, arrLambdas)
+                                    currentU, currentV, currentP, currentQ, arrAlphas_scaled, arrLambdas_scaled)
         
         #=======================================================================
         # search for max step
         #=======================================================================
-        dNextRmseR = None
+        dNextRmseR_train = None
         dNextRmseR_test = None
         dNextRmseD = None
         dNextRmseS = None
         dNextLoss = None
-        gamma = 0.1
+        gamma = g_gamma0
         while(True):
             # U
             nextU = currentU - gamma*gradU
@@ -256,11 +267,11 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
             # Q
             nextQ = currentQ - gamma*gradQ
              
-            dNextErrorR, dNextErrorD, dNextErrorS, \
-            dNextRmseR, dNextRmseR_test, dNextRmseD, dNextRmseS, \
-            dNextLoss = computeResidualError(R, D, S, nextU, nextV, nextP, nextQ, mu, \
+            mtNextErrorR, mtNextErrorD, mtNextErrorS, \
+            dNextRmseR_train, dNextRmseR_test, dNextRmseD, dNextRmseS, \
+            dNextLoss = computeResidualError(R, D, S, nextU, nextV, nextP, nextQ, bu, mu,\
                                              weightR_train, weightR_test, weightD_train, weightS_train, \
-                                             arrAlphas, arrLambdas)
+                                             arrAlphas_scaled, arrLambdas_scaled)
                  
             if (dNextLoss >= dCurrentLoss):
                 # search for max step size
@@ -280,12 +291,12 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         #=======================================================================
         dChange = dCurrentLoss-dNextLoss
         if( dChange>=0.0 and dChange<=g_dConvergenceThresold): 
-            print("converged @ step %d: loss=%f, rmseR=%f" % (nStep, dNextLoss, dNextRmseR) )
+            print("converged @ step %d: change:%f, loss=%f, rmseR_test=%f" % (nStep, dChange, dNextLoss, dNextRmseR_test) )
             
             # save RMSE
             if (lsTrainingTrace is not None):
                 dcRMSE = {}
-                dcRMSE['rmseR'] = dNextRmseR
+                dcRMSE['rmseR'] = dNextRmseR_train
                 dcRMSE['rmseR_test'] = dNextRmseR_test
                 dcRMSE['rmseD'] = dNextRmseD
                 dcRMSE['rmseS'] = dNextRmseS
@@ -295,7 +306,7 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
             if (bDebugInfo):
                 print("------------------------------")
                 print("final step:")
-                print("    RMSE(R) = %f" % dNextRmseR )
+                print("    RMSE(R) = %f" % dNextRmseR_train )
                 print("    RMSE(R)_test = %f" % dNextRmseR_test )
                 print("    RMSE(normD) = %f" % dNextRmseD )
                 print("    RMSE(normS) = %f" % dNextRmseS )
@@ -309,13 +320,13 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
         
         else: # loss decreases, but is not converged, do nothing
             if(bDebugInfo):
-                print("    change: %f" % dChange)
+                print("-->change: %f" % dChange)
             pass 
         
     #END step
     
     
-    return U, V, P, Q, mu
+    return U, V, P, Q, bu, mu
 
 def pred(R, D, S, U, V, P, Q, mu, weightR_test):
     #===========================================================================
@@ -334,23 +345,23 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
     '''
         This function cross-validates collective matrix factorization model. 
         In particular, it perform:
-        1. initialize 
+        1. cut the data into folds
         2. fit
         3. test
         
         params:
             mtR         - user-video matrix, m-by-n sparse matrix, 
-                          each element is a unsigned integer which belong to 0~100, 255 for unknown
-            mtD         - user-profile matrix, m-by-l (dense, np.nan for unknown)
-            mtS         - video-quality matrix, n-by-h (dense, np.nan for unknown)
+                          each element is a unsigned integer which belong to 0~100, 0 for unknown
+            mtD         - user-profile matrix, m-by-l (dense, 0 for unknown)
+            mtS         - video-quality matrix, n-by-h (dense, 0 for unknown)
             arrAlphas   - re-construction weights for R, D, S
             arrLambdas  - lambdas for regularization of (U, V), P, Q
             f           - number of latent factors
             nMaxStep    - max iteration steps
-            nFold       - number of foldss
+            nFold       - number of folds to validate
             
         return:
-            dcResult - train/test rmse for R of each fold
+            dcResult - train/test result for R of each fold
             lsBestTrainingTrace - RMSE of each step in best fold
         
         Note:
@@ -365,16 +376,17 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
     print('start cross validation...')
     
     # cut
-    arrNonzeroRows, arrNonzeroCols = np.nonzero(R) # already filled missing value in R by 0
+    arrNonzeroRows, arrNonzeroCols = np.nonzero(R) # Note, we have already filled missing value in R by 0
     kf = cross_validation.KFold(len(arrNonzeroRows), nFold, shuffle=True)
 
     dcResults = {}
     nCount = 0
     dBestRmseR_test = 9999999999.0
     lsBestTrainingTrace = None
+    
     for arrTrainIndex, arrTestIndex in kf:
         print("=================")
-        print("%d of %d folds..." % (nCount, nFold) )
+        print("%d-th of %d folds..." % (nCount, nFold) )
         
         #=======================================================================
         # prepare train/test data    
@@ -388,11 +400,13 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
         weightR_test = np.zeros(weightR_train.shape)
         weightR_test[arrNonzeroRows[arrTestIndex], arrNonzeroCols[arrTestIndex]] = 1.0
         
+        # TODO: will it be a problem if I do not mask corresponding tuples in D and S?
+        
         #=======================================================================
         # train
         #=======================================================================
         lsTrainingTrace = []
-        U, V, P, Q, mu = fit(R, D, S, weightR_train, weightR_test, weightD, weightS, \
+        U, V, P, Q, bu, mu = fit(R, D, S, weightR_train, weightR_test, weightD, weightS, \
                              f, arrAlphas, arrLambdas, nMaxStep, \
                              lsTrainingTrace, bDebugInfo)
         
@@ -400,20 +414,44 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
         # test
         #===========================================================================
         print("start to test...")
-        predR_test =  np.dot(U, V.T) + mu
+        predR_test =  np.dot(U, V.T) + bu + mu
+#         predR_test =  np.dot(U, V.T)
         _errorR_test = np.subtract(R, predR_test)
         errorR_test = np.multiply(weightR_test, _errorR_test)
         rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / weightR_test.sum() )
+        maeR_test = (np.abs(errorR_test)).sum() / weightR_test.sum()
         
-        dcResults[nCount] = {'train':lsTrainingTrace[-1]['rmseR'], 'test':rmseR_test}
-        print("-->traning=%f, test=%f" % (lsTrainingTrace[-1]['rmseR'], rmseR_test))
+        # coefficient of determination
+        r2_test = metrics.r2_score(np.multiply(weightR_test, R), np.multiply(weightR_test, predR_test) )
+
+        meanR = np.multiply(weightR_test, R).sum() / weightR_test.sum()
+        ss_res = np.power(np.multiply(np.subtract(R, predR_test), weightR_test), 2.0).sum()
+        ss_tot = np.power( (np.multiply(weightR_test, R-meanR) ), 2.0).sum()
+        r2_test_b = 1.0 - (ss_res/ss_tot)
+        
+        # save fold result
+        dcResults[nCount] = {'train':lsTrainingTrace[-1]['rmseR'], 'test':rmseR_test, 'mae':maeR_test}
         
         if (rmseR_test < dBestRmseR_test):
             dBestRmseR_test = rmseR_test
             lsBestTrainingTrace = lsTrainingTrace
+        
+        # print out 
+        print("-->traning=%f, rmse_test=%f, mae_test=%f, r2_test=%f, r2_test_b=%f" % 
+              (lsTrainingTrace[-1]['rmseR'], rmseR_test, maeR_test, r2_test, r2_test_b))
+        
+        if(bDebugInfo is True):
+            print("U=")
+            print U
+            print ("V=")
+            print V
+            visualizeRMSETrend(lsTrainingTrace)
+        
+
         nCount += 1
     
     print("cross validation is finished: best train=%f, test=%f" % (lsBestTrainingTrace[-1]['rmseR'], dBestRmseR_test) )
+
     return dcResults, lsBestTrainingTrace
 
 def visualizeRMSETrend(lsRMSE):
@@ -460,7 +498,7 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
     # clustering
     #===========================================================================
     print('start to clustering similar videos...')
-    aggCluster = AgglomerativeClustering(n_clusters=nTargetDimension, linkage='ward', \
+    aggCluster = AgglomerativeClustering(n_clusters=nTargetDimension, linkage='complete', \
                                          affinity='euclidean')
     arrClusterIDs = aggCluster.fit_predict(mtS)
    
@@ -489,42 +527,97 @@ def reduceVideoDimension(mtR, mtS, nTargetDimension):
             mtR_merged = np.hstack([mtR_merged, arrMergedVideoRatio])
         
     return mtR_merged, mtS_merged
+
+
+def filterInvalid(mtR, mtD, mtS):
+    '''
+        This function filter out invalid tuples in a cascade way
+    '''
+    R = mtR.copy()
+    D = mtD.copy()
+    S = mtS.copy()
+    
+    # criteria of invalid tuples
+    mtInvalidMask = (R<0.1)
+    
+    # mark those tuples as invalid ones
+    R[mtInvalidMask] = np.nan
+    
+    # reduce trivial rows & columns
+    mtValidMask = ~np.isnan(R)
+    
+    # find out users whose does not have any valid video record 
+    arrValidCount_user = np.sum(mtValidMask, axis=1)
+    srValidCount_user = pd.Series(arrValidCount_user)
+    lsTrivialUsers = srValidCount_user[srValidCount_user==0].index
+    
+    # find out videos which has not been watched validly
+    arrValidCount_video = np.sum(mtValidMask, axis=0)
+    srValidCount_video = pd.Series(arrValidCount_video)
+    lsTrivialVideos = srValidCount_video[srValidCount_video == 0].index
+    
+    # delete
+    R = np.delete(R, lsTrivialUsers, axis=0)
+    D = np.delete(D, lsTrivialUsers, axis=0)
+    
+    R = np.delete(R, lsTrivialVideos, axis=1)
+    S = np.delete(S, lsTrivialVideos, axis=0)
+    
+    return R, D, S
+            
+    
     
 if __name__ == '__main__':
     # load data
-    mtR = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtR_0discre_top100.npy')
-    mtD = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtD_0discre_top100.npy')
-    mtS = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtS_0discre_top100.npy')
+    mtR = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtR_0discre_rand1000.npy')
+    mtD = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtD_0discre_rand1000.npy')
+    mtS = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtS_0discre_rand1000.npy')
     
     # setup
-    arrAlphas = np.array([0.008, 0.001, 0.001])
-    arrLambdas = np.array([1.0, 1.0, 1.0])
-    f = 5
-    nMaxStep = 300
+    arrAlphas = np.array([0.5, 0.3, 0.0]) # will be scaled in the core of CMF
+    arrLambdas = np.array([0.2, 0.01, 0.01]) # since this value should be tune by user, it won't be scaled
+    f = 10
+    nMaxStep = 500
     nFold = 10
+    
+    # filter out invalid tuple
+    R_filtered, D_filtered, S_filtered = filterInvalid(mtR, mtD, mtS)
     
     # init
     print('start to initialize...')
+    
+    # init: prepare weight matrix, scale features and aggregate videos
     R_reduced, D_reduced, S_reduced, \
-    weightR_reduced, weightD_reduced, \
-    weightS_reduced = init(mtR, mtD, mtS, inplace=False, \
-                           bReduceVideoDimension=False, dReductionRatio=0.7)
-     
+    weightR_reduced, weightD_reduced, weightS_reduced = init(R_filtered, D_filtered, S_filtered, inplace=False, \
+                                                             bReduceVideoDimension=True, dReductionRatio=0.5)
+    
+    print "R_reduced.shape=", R_reduced.shape
+    print "D_reduced.shape=", D_reduced.shape
+    print "S_reduced.shape=", S_reduced.shape
+    print "weightR_reduced.sum=", weightR_reduced.sum()
+    print "weightD_reduced.sum=", weightD_reduced.sum()
+    print "weightS_reduced.sum=", weightS_reduced.sum()
+    
     # cross validation
     dcResult, lsBestTrainingRMSEs = crossValidate(R_reduced, D_reduced, S_reduced, \
                                                   weightR_reduced, weightD_reduced, weightS_reduced, \
                                                   arrAlphas, arrLambdas, \
                                                   f, nMaxStep, nFold, \
                                                   bDebugInfo=True)
-    # visualize
-    visualizeRMSETrend(lsBestTrainingRMSEs)
+#     # visualize
+#     visualizeRMSETrend(lsBestTrainingRMSEs)
     
     for k, v in dcResult.items():
-        print("fold %d: train=%f, test=%f" % (k, v['train'], v['test']) )
+        print("fold %d: train=%f, test=%f, mae=%f" % (k, v['train'], v['test'], v['mae']) )
     
     lsTestRMSE = [v['test'] for v in dcResult.values() ] 
-    dMean = np.mean(lsTestRMSE)
-    dStd = np.std(lsTestRMSE)
-    print('mean=%f, std=%f' % (dMean, dStd))
+    dMean_rmse = np.mean(lsTestRMSE)
+    dStd_rmse = np.std(lsTestRMSE)
+    print('-->RMSE: mean=%f, std=%f' % (dMean_rmse, dStd_rmse))
+    
+    lsTestMAE = [v['mae'] for v in dcResult.values() ] 
+    dMean_mae = np.mean(lsTestMAE)
+    dStd_mae = np.std(lsTestMAE)
+    print('-->MAE: mean=%f, std=%f' % (dMean_mae, dStd_mae))
     
     print('finished*********')
