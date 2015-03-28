@@ -15,6 +15,7 @@ from sklearn import cross_validation
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import BaggingRegressor
 import math
 
 def transformMatrices2FlatTable(strRPath, strDPath, strSPath):
@@ -88,6 +89,11 @@ def baseline(arrX, arrY, strModelName, dcModelParams, nFold=10, lsFeatureNames=N
                 model = RandomForestRegressor(**dcModelParams)
             else:
                 model = RandomForestRegressor()
+        elif (strModelName == 'bagging_decision_tree_regression'):
+            if dcModelParams is not None:
+                model = BaggingRegressor(DecisionTreeRegressor(), **dcModelParams)
+            else:
+                model = BaggingRegressor(DecisionTreeRegressor())
                 
         elif (strModelName == 'linear_regression'):
             if dcModelParams is not None:
@@ -164,16 +170,17 @@ if __name__ == '__main__':
     #===========================================================================
     # model setup
     #===========================================================================
-    strModelName = 'GBRT'
-    modelParams = {'n_estimators':100} 
+#     strModelName = 'GBRT'
+#     modelParams = {'n_estimators':100} 
     
 #     strModelName = 'random_forest_regression'
 #     modelParams = {'n_estimators':50} 
     
-#     strModelName = 'decision_tree_regression'
-#     modelParams = {'max_depth':4}
+    strModelName = 'decision_tree_regression'
+    modelParams = {'max_depth':4}
+
+#     strModelName = 'bagging_decision_tree_regression'
 #     modelParams = None
-    
 
 #     strModelName = 'linear_regression'
 #     modelParams = {'normalize':False}
