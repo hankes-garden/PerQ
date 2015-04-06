@@ -65,5 +65,3 @@ def getSecondofDay(nTimestamp):
     dt = datetime.datetime.fromtimestamp(nTimestamp)
     return (dt.hour*3600 + dt.minute*60 + dt.second)
     
-    
-    

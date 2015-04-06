@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 '''
 Brief Description: 
     This model implement Collective Matrix factorization (http://dl.acm.org/citation.cfm?id=1401969).
@@ -15,6 +15,8 @@ from sklearn import cross_validation
 from sklearn.cluster.hierarchical import AgglomerativeClustering
 from sklearn import metrics
 
+
+import matplotlib.pyplot as plt
 
 g_dConvergenceThresold = 0.01
 g_gamma0 = 0.1
@@ -96,7 +98,7 @@ def computeParitialGraident(errorR, errorD, errorS, U, V, P, Q, Bu, Bv, Jm, Jn, 
     
     return gradU, gradV, gradP, gradQ, gradBu, gradBv
 
-def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.7):
+def init(mtR, mtD, mtS, inplace, dReductionRatio=0.7):
     '''
         This function:
         1. return the weight matrices for R,D,S;
@@ -157,7 +159,7 @@ def init(mtR, mtD, mtS, inplace, bReduceVideoDimension=True, dReductionRatio=0.7
     #===========================================================================
     # reduce video dimension
     #===========================================================================
-    if (bReduceVideoDimension):
+    if (dReductionRatio < 1.0 ):
         print('start to reduce video dimension...')
         R, S = reduceVideoDimension(R, S, int(S.shape[0]*dReductionRatio))
         
@@ -212,9 +214,9 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
     
     dScale = 1000.0
     arrAlphas_scaled = arrAlphas.copy()
-    arrAlphas_scaled[0] = dScale * arrAlphas_scaled[0] / weightR_train.sum()
-    arrAlphas_scaled[1] = dScale * arrAlphas_scaled[1] / weightD_train.sum()
-    arrAlphas_scaled[2] = dScale * arrAlphas_scaled[2] / weightS_train.sum()
+#     arrAlphas_scaled[0] = dScale * arrAlphas_scaled[0] / weightR_train.sum()
+#     arrAlphas_scaled[1] = dScale * arrAlphas_scaled[1] / weightD_train.sum()
+#     arrAlphas_scaled[2] = dScale * arrAlphas_scaled[2] / weightS_train.sum()
     
     # lambda will be tuned more easily if we do not scale it.
     arrLambdas_scaled = arrLambdas.copy()
@@ -228,7 +230,6 @@ def fit(R, D, S, weightR_train, weightR_test, weightD_train, weightS_train, \
     #===========================================================================
     # iterate until converge or max steps
     #===========================================================================
-    print("start to train model...")
     for nStep in xrange(nMaxStep):
         currentU = U
         currentP = P
@@ -413,7 +414,6 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
     lsBestTrainingTrace = None
     
     for arrTrainIndex, arrTestIndex in kf:
-        print("=================")
         print("%d-th of %d folds..." % (nCount, nFold) )
         
         #=======================================================================
@@ -442,7 +442,6 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
         #===========================================================================
         # test
         #===========================================================================
-        print("start to test...")
         predR_test =  np.dot(U, V.T) + np.dot(Bu, Jn.T)  + np.dot(Jm, Bv.T) + mu
 #         predR_test =  np.dot(U, V.T)
         _errorR_test = np.subtract(R, predR_test)
@@ -450,14 +449,7 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
         rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / weightR_test.sum() )
         maeR_test = (np.abs(errorR_test)).sum() / weightR_test.sum()
         
-        # coefficient of determination
-        r2_test = metrics.r2_score(np.multiply(weightR_test, R), np.multiply(weightR_test, predR_test) )
-
-        meanR = np.multiply(weightR_test, R).sum() / weightR_test.sum()
-        ss_res = np.power(np.multiply(np.subtract(R, predR_test), weightR_test), 2.0).sum()
-        ss_tot = np.power( (np.multiply(weightR_test, R-meanR) ), 2.0).sum()
-        r2_test_b = 1.0 - (ss_res/ss_tot)
-        
+       
         # save fold result
         dcResults[nCount] = {'train':lsTrainingTrace[-1]['rmseR'], 'test':rmseR_test, 'mae':maeR_test}
         
@@ -466,8 +458,8 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
             lsBestTrainingTrace = lsTrainingTrace
         
         # print out 
-        print("-->traning=%f, rmse_test=%f, mae_test=%f, r2_test=%f, r2_test_b=%f" % 
-              (lsTrainingTrace[-1]['rmseR'], rmseR_test, maeR_test, r2_test, r2_test_b))
+        print("rmse_traning=%f, rmse_test=%f, mae_test=%f" % 
+              (lsTrainingTrace[-1]['rmseR'], rmseR_test, maeR_test))
         
         if(bDebugInfo is True):
             visualizeRMSETrend(lsTrainingTrace)
@@ -628,48 +620,46 @@ def InvestigateError(matErrorR_test, R, predR_test, mu, Bu, Bv, U, V, weightR_te
     dfErrorReason = pd.DataFrame(lsData)
     
     return dfErrorReason
-    
-    
-if __name__ == '__main__':
+
+def testCMF(**kwargs):
     # load data
     mtR = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtR_0discre_rand1000.npy')
     mtD = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtD_0discre_rand1000.npy')
     mtS = np.load('d:\\playground\\personal_qoe\\data\\sh\\mtS_0discre_rand1000.npy')
     
-    # setup
-    arrAlphas = np.array([0.5, 0.2, 0.3]) # will be scaled in the core of CMF
-    arrLambdas = np.array([0.1, 0.1, 0.1, 0.1, 0.1]) # U&V, P, Q, Bu, Bv
-    f = 5
-    nMaxStep = 500
-    nFold = 10
-    
-    # init
-    print('start to initialize...')
-    
+    # setup parameter
+    arrAlphas = kwargs['alphas'] # will be scaled in the core of CMF
+    arrLambdas = kwargs['lambdas'] # U&V, P, Q, Bu, Bv
+    f = kwargs['f']
+    nMaxStep = kwargs['max_step']
+    nFold = kwargs['folds']
+    bDebugTrace = kwargs['debug_trace']
+    dReductionRatio = kwargs['video_reduction_ratio']
+    bVisualize = kwargs['visualize']
+     
     # filter out invalid tuple
     R_filtered, D_filtered, S_filtered = filterInvalidRecords(mtR, mtD, mtS)
     
-    # init: prepare weight matrix, scale features and aggregate videos
+    # init (prepare weight matrix, scale features and aggregate videos)
     R_reduced, D_reduced, S_reduced, \
-    weightR_reduced, weightD_reduced, weightS_reduced = init(R_filtered, D_filtered, S_filtered, inplace=False, \
-                                                             bReduceVideoDimension=True, dReductionRatio=0.5)
-    
-    print "R_reduced.shape=", R_reduced.shape
-    print "D_reduced.shape=", D_reduced.shape
-    print "S_reduced.shape=", S_reduced.shape
-    print "weightR_reduced.sum=", weightR_reduced.sum()
-    print "weightD_reduced.sum=", weightD_reduced.sum()
-    print "weightS_reduced.sum=", weightS_reduced.sum()
+    weightR_reduced, weightD_reduced, weightS_reduced = init(R_filtered, D_filtered, S_filtered, inplace=False,
+                                                             dReductionRatio=dReductionRatio)
+    if (bDebugTrace is True):
+        print "R_reduced.shape=", R_reduced.shape
+        print "D_reduced.shape=", D_reduced.shape
+        print "S_reduced.shape=", S_reduced.shape
+        print "weightR_reduced.sum=", weightR_reduced.sum()
+        print "weightD_reduced.sum=", weightD_reduced.sum()
+        print "weightS_reduced.sum=", weightS_reduced.sum()
     
     # cross validation
     dcResult, lsBestTrainingRMSEs = crossValidate(R_reduced, D_reduced, S_reduced, \
                                                   weightR_reduced, weightD_reduced, weightS_reduced, \
                                                   arrAlphas, arrLambdas, \
                                                   f, nMaxStep, nFold, \
-                                                  bDebugInfo=True)
-#     # visualize
-#     visualizeRMSETrend(lsBestTrainingRMSEs)
-    
+                                                  bDebugTrace)
+
+    # output result
     for k, v in dcResult.items():
         print("fold %d: train=%f, test=%f, mae=%f" % (k, v['train'], v['test'], v['mae']) )
     
@@ -683,4 +673,129 @@ if __name__ == '__main__':
     dStd_mae = np.std(lsTestMAE)
     print('-->MAE: mean=%f, std=%f' % (dMean_mae, dStd_mae))
     
+    # visualize
+    if (bVisualize is True):
+        visualizeRMSETrend(lsBestTrainingRMSEs)
+    
     print('finished*********')
+    
+    return dMean_rmse, dStd_rmse, dMean_mae, dStd_mae
+
+def investigateImpactOfParameters(strParamName, bPlot, strPath=None):
+    '''
+        This function investigate the impact of parameter on model performance by
+        trying different combinations of parameters
+        
+        Parameters:
+            strParamName - parameter to examine
+            bPlot        - visualize the result if it is true
+            strPath      - save the result in csv format if it is true
+    '''
+    
+    # set default param
+    dcTestParam = {}
+    dcTestParam['alphas'] = np.array([1.0, 0.05, 0.12]) # will NOT be scaled in the core of CMF!
+    dcTestParam['lambdas'] = np.array([0.9, 0.9, 0.9, 0.9, 0.9]) # U&V, P, Q, Bu, Bv
+    dcTestParam['f'] = 10
+    dcTestParam['video_reduction_ratio'] = 0.5
+    dcTestParam['max_step'] = 500
+    dcTestParam['folds'] = 5
+    
+    dcTestParam['debug_trace'] = False
+    dcTestParam['visualize'] = False
+    
+    #===========================================================================
+    # try different params
+    #===========================================================================
+    print("investigating impact of %s..." % (strParamName) )
+    lsResults = []
+    if (strParamName == 'c'):
+        for i in range(1,10,1):
+            dcTestParam['video_reduction_ratio'] = i * 0.1
+            dMean_rmse, dStd_rmse, dMean_mae, dStd_mae = testCMF(**dcTestParam)
+            lsResults.append({strParamName:i*0.1, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
+        
+    elif (strParamName == 'f'):
+        for i in range(5, 25, 5):
+            dcTestParam['f'] = i
+            dMean_rmse, dStd_rmse, dMean_mae, dStd_mae = testCMF(**dcTestParam)
+            lsResults.append({strParamName:i, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
+        
+    elif(strParamName == 'alpha_2'):
+        dVar = 0.01
+        for i in range(0, 5, 1):
+            dcTestParam['alphas'] = np.array([1.0, dVar, 0.12])
+            dMean_rmse, dStd_rmse, dMean_mae, dStd_mae = testCMF(**dcTestParam)
+            lsResults.append({strParamName:dVar, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
+            dVar = dVar * 5
+    
+    elif(strParamName == 'alpha_3'):
+        dVar = 0.0001
+        for i in range(0, 5, 1):
+            dcTestParam['alphas'] = np.array([1.0, 0.1, dVar])
+            dMean_rmse, dStd_rmse, dMean_mae, dStd_mae = testCMF(**dcTestParam)
+            lsResults.append({strParamName:dVar, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
+            dVar = dVar * 10.0
+    
+    elif(strParamName == 'lambda'):
+            dVar = 0.1
+            for i in range(0, 5, 1):
+                dcTestParam['lambdas'] = np.array([dVar] *5)
+                dMean_rmse, dStd_rmse, dMean_mae, dStd_mae = testCMF(**dcTestParam)
+                lsResults.append({strParamName:dVar, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
+                dVar = dVar * 3
+
+    else:
+        print("Error: unknown parameter name %s." % strParamName)
+        return
+    
+    #===========================================================================
+    # save result
+    #===========================================================================
+    if(strPath is not None):
+            # construct data frame
+            df = pd.DataFrame(lsResults)
+            df.sort(strParamName, ascending=True, inplace=True)
+            df.set_index(strParamName, inplace=True)
+            df.to_csv( "%s%s.csv" % (strPath, strParamName) )
+            
+    #===========================================================================
+    # draw error bar
+    #===========================================================================
+
+    if(bPlot is True):
+        drawImapctOfParameter(lsResults, strParamName)
+    
+    for ret in lsResults:
+        print ret
+    print("Investigation finished.")
+        
+   
+def drawImapctOfParameter(lsResult, strParamName):
+    # construct data frame
+    df = pd.DataFrame(lsResult)
+    df.sort(strParamName, ascending=True, inplace=True)
+    df.set_index(strParamName, inplace=True)
+    
+    # plot
+    ax0 = plt.figure().add_subplot(111)
+    ax0.errorbar(x=df.index.tolist(), y=df['mae_mean'].tolist(), yerr=df['mae_std'].tolist(), marker='s', lw=2, label='mae')
+    ax0.errorbar(x=df.index.tolist(), y=df['rmse_mean'], yerr=df['rmse_std'], marker='o', label='rmse')
+
+    # set legend
+    handles, labels = ax0.get_legend_handles_labels()
+    handles = [h[0] for h in handles]
+    ax0.legend(handles, labels, loc='best', numpoints=1)
+
+    # set axis
+    ax0.yaxis.set_ticks(np.arange(0.0, 1.5, 0.1))
+    ax0.set_xlabel(strParamName)
+    ax0.set_ylabel('error rate')
+    
+    plt.show()
+    
+if __name__ == '__main__':
+    investigateImpactOfParameters('f', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+    investigateImpactOfParameters('lambda', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+    investigateImpactOfParameters('c', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+    investigateImpactOfParameters('alpha_3', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
