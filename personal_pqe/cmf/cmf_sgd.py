@@ -13,7 +13,6 @@ import pandas as pd
 import sklearn.preprocessing as prepro
 from sklearn import cross_validation
 from sklearn.cluster.hierarchical import AgglomerativeClustering
-from sklearn import metrics
 
 
 import matplotlib.pyplot as plt
@@ -369,8 +368,8 @@ def pred(R, D, S, U, V, P, Q, mu, weightR_test):
     return rmseR_test
 
 def crossValidate(R, D, S, weightR, weightD, weightS, \
-                  arrAlphas, arrLambdas, f, nMaxStep, nFold=10, \
-                  bDebugInfo=False):
+                  arrAlphas, arrLambdas, f, nMaxStep, nFold, \
+                  bDebugInfo, bPlotTrace):
     '''
         This function cross-validates collective matrix factorization model. 
         In particular, it perform:
@@ -443,7 +442,6 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
         # test
         #===========================================================================
         predR_test =  np.dot(U, V.T) + np.dot(Bu, Jn.T)  + np.dot(Jm, Bv.T) + mu
-#         predR_test =  np.dot(U, V.T)
         _errorR_test = np.subtract(R, predR_test)
         errorR_test = np.multiply(weightR_test, _errorR_test)
         rmseR_test = np.sqrt( np.power(errorR_test, 2.0).sum() / weightR_test.sum() )
@@ -461,7 +459,7 @@ def crossValidate(R, D, S, weightR, weightD, weightS, \
         print("rmse_traning=%f, rmse_test=%f, mae_test=%f" % 
               (lsTrainingTrace[-1]['rmseR'], rmseR_test, maeR_test))
         
-        if(bDebugInfo is True):
+        if(bPlotTrace is True):
             visualizeRMSETrend(lsTrainingTrace)
             
 #         # investigate reason
@@ -657,7 +655,7 @@ def testCMF(**kwargs):
                                                   weightR_reduced, weightD_reduced, weightS_reduced, \
                                                   arrAlphas, arrLambdas, \
                                                   f, nMaxStep, nFold, \
-                                                  bDebugTrace)
+                                                  bDebugTrace, bVisualize)
 
     # output result
     for k, v in dcResult.items():
@@ -694,7 +692,7 @@ def investigateImpactOfParameters(strParamName, bPlot, strPath=None):
     
     # set default param
     dcTestParam = {}
-    dcTestParam['alphas'] = np.array([1.0, 0.05, 0.12]) # will NOT be scaled in the core of CMF!
+    dcTestParam['alphas'] = np.array([1.0, 0.01, 0.12]) # will NOT be scaled in the core of CMF!
     dcTestParam['lambdas'] = np.array([0.9, 0.9, 0.9, 0.9, 0.9]) # U&V, P, Q, Bu, Bv
     dcTestParam['f'] = 10
     dcTestParam['video_reduction_ratio'] = 0.5
@@ -716,18 +714,18 @@ def investigateImpactOfParameters(strParamName, bPlot, strPath=None):
             lsResults.append({strParamName:i*0.1, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
         
     elif (strParamName == 'f'):
-        for i in range(5, 25, 5):
+        for i in range(5, 30, 5):
             dcTestParam['f'] = i
             dMean_rmse, dStd_rmse, dMean_mae, dStd_mae = testCMF(**dcTestParam)
             lsResults.append({strParamName:i, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
         
     elif(strParamName == 'alpha_2'):
-        dVar = 0.01
+        dVar = 0.001
         for i in range(0, 5, 1):
             dcTestParam['alphas'] = np.array([1.0, dVar, 0.12])
             dMean_rmse, dStd_rmse, dMean_mae, dStd_mae = testCMF(**dcTestParam)
             lsResults.append({strParamName:dVar, 'rmse_mean':dMean_rmse, 'rmse_std':dStd_rmse, 'mae_mean':dMean_mae, 'mae_std':dStd_mae} )
-            dVar = dVar * 5
+            dVar = dVar * 10
     
     elif(strParamName == 'alpha_3'):
         dVar = 0.0001
@@ -780,22 +778,36 @@ def drawImapctOfParameter(lsResult, strParamName):
     # plot
     ax0 = plt.figure().add_subplot(111)
     ax0.errorbar(x=df.index.tolist(), y=df['mae_mean'].tolist(), yerr=df['mae_std'].tolist(), marker='s', lw=2, label='mae')
-    ax0.errorbar(x=df.index.tolist(), y=df['rmse_mean'], yerr=df['rmse_std'], marker='o', label='rmse')
+#     ax0.errorbar(x=df.index.tolist(), y=df['rmse_mean'], yerr=df['rmse_std'], marker='o', label='rmse')
 
-    # set legend
-    handles, labels = ax0.get_legend_handles_labels()
-    handles = [h[0] for h in handles]
-    ax0.legend(handles, labels, loc='best', numpoints=1)
+#     # set legend
+#     handles, labels = ax0.get_legend_handles_labels()
+#     handles = [h[0] for h in handles]
+#     ax0.legend(handles, labels, loc='best', numpoints=1)
 
     # set axis
-    ax0.yaxis.set_ticks(np.arange(0.0, 1.5, 0.1))
+#     ax0.yaxis.set_ticks(np.arange(0.0, 1.5, 0.1))
     ax0.set_xlabel(strParamName)
-    ax0.set_ylabel('error rate')
+    ax0.set_ylabel('mean absolute error')
     
     plt.show()
     
 if __name__ == '__main__':
-    investigateImpactOfParameters('f', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
-    investigateImpactOfParameters('lambda', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
-    investigateImpactOfParameters('c', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
-    investigateImpactOfParameters('alpha_3', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+#     # set default param
+#     dcTestParam = {}
+#     dcTestParam['alphas'] = np.array([1.0, 0.01, 0.01]) # will NOT be scaled in the core of CMF!
+#     dcTestParam['lambdas'] = np.array([0.9, 0.9, 0.9, 0.9, 0.9]) # U&V, P, Q, Bu, Bv
+#     dcTestParam['f'] = 10
+#     dcTestParam['video_reduction_ratio'] = 0.5
+#     dcTestParam['max_step'] = 500
+#     dcTestParam['folds'] = 10
+#     
+#     dcTestParam['debug_trace'] = True
+#     dcTestParam['visualize'] = False
+#     
+#     testCMF(**dcTestParam)
+#     investigateImpactOfParameters('f', True, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+#     investigateImpactOfParameters('lambda', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+#     investigateImpactOfParameters('c', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+    investigateImpactOfParameters('alpha_2', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
+#     investigateImpactOfParameters('alpha_3', False, 'D:\\playground\\personal_qoe\\result\\impact_of_param\\')
